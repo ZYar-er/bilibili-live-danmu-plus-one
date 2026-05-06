@@ -365,6 +365,8 @@ fullscreen       : ${DBG.fullscreen}`;
     el.dataset.dm1Frozen = '1';
     el.dataset.dm1OldAnimPlay = el.style.animationPlayState || '';
     el.style.setProperty('animation-play-state', 'paused', 'important');
+    // 快照 rect：B站可能通过 JS 定时器移除元素，rect 届时不可用
+    if (currentHit) currentHit.lastRect = el.getBoundingClientRect();
     setDbg('frozen', true);
   }
 
@@ -378,15 +380,42 @@ fullscreen       : ${DBG.fullscreen}`;
   }
 
   function clearCurrentHit() {
-    if (currentHit?.el) unfreeze(currentHit.el);
+    if (currentHit?.el && isElementAlive(currentHit.el)) unfreeze(currentHit.el);
     currentHit = null;
     setDbg('hitText', '');
     setDbg('hitType', '');
     setDbg('currentConnected', false);
   }
 
+  // 当前命中元素被 B站 JS 清理移除 → 转为 ghost 模式，保留文本和最后位置
+  function markGhost() {
+    if (!currentHit || !currentHit.text) return;
+    if (currentHit.lastRect) return; // 已是 ghost
+    // 保存元素消失前最后一帧的 rect
+    if (currentHit.el && currentHit.el.getBoundingClientRect) {
+      const r = currentHit.el.getBoundingClientRect();
+      if (r.width > 0) currentHit.lastRect = r;
+    }
+    currentHit.el = null; // 释放已断开连接的 DOM 引用
+    setDbg('currentConnected', false);
+  }
+
   function placeBtnInDanmakuRowAt20(hit) {
-    if (!hit?.el || !isElementAlive(hit.el)) return;
+    if (!hit) return;
+    // ghost 模式：使用保存的最后位置
+    if (!hit.el) {
+      if (!hit.lastRect) return;
+      const r = hit.lastRect;
+      let x = r.left + r.width * CONFIG.horizontalRatio;
+      let y = CONFIG.yInRowMode ? (r.top + r.height / 2) : (r.bottom + CONFIG.btnApproxH / 2);
+      const m = CONFIG.marginPx;
+      x = clamp(x, m + CONFIG.btnApproxW / 2, innerWidth - m - CONFIG.btnApproxW / 2);
+      y = clamp(y, m + CONFIG.btnApproxH / 2, innerHeight - m - CONFIG.btnApproxH / 2);
+      plusBtn.style.left = `${x}px`;
+      plusBtn.style.top = `${y}px`;
+      return;
+    }
+    if (!isElementAlive(hit.el)) return;
 
     const r = rectSnapshot.get(hit.el) || hit.el.getBoundingClientRect();
 
@@ -414,12 +443,33 @@ fullscreen       : ${DBG.fullscreen}`;
   }
 
   function refreshHoverStateImmediate() {
-    if (currentHit?.el && !isElementAlive(currentHit.el)) {
-      hideBtn();
+    // ghost 模式：弹幕已被 B站移除，但保留文本 + 最后位置，按钮继续显示
+    if (!currentHit?.el) {
+      if (currentHit?.lastRect) {
+        const gw = currentHit.lastRect;
+        const inGhost = pointInRect(mouse.x, mouse.y, gw, CONFIG.hitPaddingPx);
+        const br = plusBtn.getBoundingClientRect();
+        const inBtn = plusBtn.style.display === 'block' && pointInRect(mouse.x, mouse.y, br, 0);
+        if (inGhost || inBtn) {
+          if (plusBtn.style.display !== 'block') showBtn(currentHit);
+          return;
+        }
+        // 鼠标已离开 ghost 区域 → 彻底清理
+        hideBtn();
+        clearCurrentHit();
+        return;
+      }
+      // 无 ghost rect 也无 el → 安全退出
+      if (plusBtn.style.display !== 'none') hideBtn();
       clearCurrentHit();
       return;
     }
-    if (!currentHit?.el) return;
+
+    if (!isElementAlive(currentHit.el)) {
+      markGhost();
+      // 递归：下次 tick 进入 ghost 分支
+      return;
+    }
 
     const r = rectSnapshot.get(currentHit.el) || currentHit.el.getBoundingClientRect();
     const inDanmaku = pointInRect(mouse.x, mouse.y, r, CONFIG.hitPaddingPx);
@@ -535,22 +585,25 @@ fullscreen       : ${DBG.fullscreen}`;
       setDbg('mouse', `${mouse.x},${mouse.y}`);
 
       if (currentHit?.el && !isElementAlive(currentHit.el)) {
-        hideBtn();
-        clearCurrentHit();
+        markGhost();
       }
 
       const hit = findHitLive(mouse.x, mouse.y);
 
       if (hit) {
         if (!currentHit || currentHit.el !== hit.el) {
-          if (currentHit?.el) unfreeze(currentHit.el);
+          if (currentHit?.el && isElementAlive(currentHit.el)) unfreeze(currentHit.el);
           currentHit = hit;
           freeze(hit.el);
           setDbg('hitText', hit.text);
           setDbg('hitType', hit.type);
           showBtn(currentHit);
         }
-        setDbg('currentConnected', isElementAlive(currentHit.el));
+        // 每帧更新 lastRect：B站 JS 清理时 getBoundingClientRect 返回零值
+        if (currentHit?.el && isElementAlive(currentHit.el)) {
+          currentHit.lastRect = rectSnapshot.get(currentHit.el) || currentHit.el.getBoundingClientRect();
+        }
+        setDbg('currentConnected', isElementAlive(currentHit?.el));
       } else {
         refreshHoverStateImmediate();
       }
@@ -572,10 +625,9 @@ fullscreen       : ${DBG.fullscreen}`;
     if (clickLocked || now - lastClickAt < CONFIG.clickDebounceMs) return;
     lastClickAt = now;
 
+    // ghost 模式：el 已回收但 text 仍有效，继续发送
     if (currentHit?.el && !isElementAlive(currentHit.el)) {
-      hideBtn();
-      clearCurrentHit();
-      return;
+      markGhost();
     }
     if (!currentHit?.text) return;
 
@@ -611,10 +663,9 @@ fullscreen       : ${DBG.fullscreen}`;
 
   const mo = new MutationObserver(() => {
     dmListDirty = true;
-    // 每次 MO 都检查当前命中元素是否存活（开销小），止损及时
+    // 当前命中元素被 B站 JS 定时清理 → 保留 ghost，不隐藏按钮
     if (currentHit?.el && !isElementAlive(currentHit.el)) {
-      hideBtn();
-      clearCurrentHit();
+      markGhost();
       mouseDirty = true;
     }
     // 合并到单次 rAF 调度
