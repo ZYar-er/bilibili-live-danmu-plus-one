@@ -7,7 +7,16 @@
 // @description:zh-CN  鼠标悬停弹幕即可一键发送同款弹幕+1，支持文字/emoji/表情图片，可配置发送间隔
 // @author       user (https://github.com/user)
 // @license      MIT
-// @match        https://live.bilibili.com/*
+// @match        *://live.bilibili.com/0*
+// @match        *://live.bilibili.com/1*
+// @match        *://live.bilibili.com/2*
+// @match        *://live.bilibili.com/3*
+// @match        *://live.bilibili.com/4*
+// @match        *://live.bilibili.com/5*
+// @match        *://live.bilibili.com/6*
+// @match        *://live.bilibili.com/7*
+// @match        *://live.bilibili.com/8*
+// @match        *://live.bilibili.com/9*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
@@ -20,9 +29,6 @@
 
 (function () {
   'use strict';
-
-  // 仅在实际直播间页面运行（非 /all /p/ 等聚合页）
-  if (!/^\/\d+($|\/)/.test(location.pathname)) return;
 
   // --- 配置持久化 (GM_getValue → localStorage fallback) ---
   function storageGet(key, def) {
@@ -178,19 +184,10 @@ fullscreen       : ${DBG.fullscreen}`;
   }
 
   function mountOverlay() {
-    // 无播放器容器则不挂载面板（activity iframe / 非直播间页面不会误创建）
     const r = root();
-    const hasPlayer = !!findDmContainer();
-    if (hasPlayer) {
-      if (plusBtn.parentNode !== r) r.appendChild(plusBtn);
-      if (CONFIG.debug && debugPanel.parentNode !== r) r.appendChild(debugPanel);
-      if (dmSafeContainer.parentNode !== r) r.appendChild(dmSafeContainer);
-    } else {
-      // 播放器消失（下播/SPA离开）→ 卸载面板，避免残留
-      if (plusBtn.parentNode) plusBtn.remove();
-      if (debugPanel.parentNode) debugPanel.remove();
-      if (dmSafeContainer.parentNode) dmSafeContainer.remove();
-    }
+    if (plusBtn.parentNode !== r) r.appendChild(plusBtn);
+    if (CONFIG.debug && debugPanel.parentNode !== r) r.appendChild(debugPanel);
+    if (dmSafeContainer.parentNode !== r) r.appendChild(dmSafeContainer);
   }
 
   function isElementAlive(el) {
