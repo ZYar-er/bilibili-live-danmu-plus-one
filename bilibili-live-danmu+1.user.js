@@ -44,7 +44,6 @@
     appendPlusOne: false,
 
     imageFallbackText: '[表情]',
-    preferImageMetaText: true,
     // 从图片URL推断emoji标识（如 [emoji:xxx]）
     inferEmojiFromImageUrl: true,
 
@@ -213,33 +212,69 @@ fullscreen       : ${DBG.fullscreen}`;
     }
   }
 
-  // emoji适配增强：文本(含emoji) / 图片emoji / 混合
+  // 从 img.emote 提取表情代码（优先 alt → title → aria-label → URL推断 → fallback）
+  function getEmojiCode(img) {
+    const alt = (img.getAttribute('alt') || '').trim();
+    if (alt) return alt;
+    const title = (img.getAttribute('title') || '').trim();
+    if (title) return title;
+    const aria = (img.getAttribute('aria-label') || '').trim();
+    if (aria) return aria;
+    if (CONFIG.inferEmojiFromImageUrl) {
+      const inferred = inferEmojiNameFromSrc(img.getAttribute('src') || '');
+      if (inferred) return inferred;
+    }
+    return CONFIG.imageFallbackText;
+  }
+
+  // 遍历 childNodes 重建弹幕内容，正确处理图文混合
   function extractDmPayload(el) {
-    // 不对 DOM 元素做缓存：B站会复用弹幕节点，textContent 变化但引用不变
-    const rawText = (el.textContent || '').replace(/\s+/g, ' ').trim();
-    if (rawText) return { type: 'text', text: rawText };
+    const parts = [];
+    const has = { text: false, emoji: false, large: false };
 
-    const img = el.querySelector('img');
-    if (img) {
-      if (CONFIG.preferImageMetaText) {
-        const meta = (
-          img.getAttribute('alt') ||
-          img.getAttribute('title') ||
-          img.getAttribute('aria-label') ||
-          ''
-        ).trim();
-        if (meta) return { type: 'emoji-image', text: meta };
+    function walk(node) {
+      for (let child = node.firstChild; child; child = child.nextSibling) {
+        if (child.nodeType === Node.TEXT_NODE) {
+          const t = child.textContent.replace(/\s+/g, ' ').trim();
+          if (t) { parts.push({ type: 'text', text: t }); has.text = true; }
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+          // 检查元素本身是否是 emote img
+          if (child.matches && child.matches('img.emote')) {
+            const code = getEmojiCode(child);
+            const isLarge = !!child.closest('.emote--bulge');
+            parts.push({ type: isLarge ? 'emoji-large' : 'emoji', text: code });
+            if (isLarge) has.large = true; else has.emoji = true;
+          } else {
+            // 检查子元素中是否有 emote img（如 .emote-wrap 包裹）
+            const innerImg = child.querySelector && child.querySelector('img.emote');
+            if (innerImg) {
+              const code = getEmojiCode(innerImg);
+              const isLarge = !!innerImg.closest('.emote--bulge');
+              parts.push({ type: isLarge ? 'emoji-large' : 'emoji', text: code });
+              if (isLarge) has.large = true; else has.emoji = true;
+            } else {
+              // 普通容器 → 递归
+              walk(child);
+            }
+          }
+        }
       }
-
-      if (CONFIG.inferEmojiFromImageUrl) {
-        const inferred = inferEmojiNameFromSrc(img.getAttribute('src') || '');
-        if (inferred) return { type: 'emoji-image', text: inferred };
-      }
-
-      return { type: 'emoji-image', text: CONFIG.imageFallbackText };
     }
 
-    return { type: 'unknown', text: '' };
+    walk(el);
+
+    if (parts.length === 0) return { type: 'unknown', text: '', parts };
+
+    const allText = parts.map(p => p.text).join('');
+
+    let aggregateType = 'unknown';
+    const hasEmoji = has.emoji || has.large;
+    if (has.text && hasEmoji) aggregateType = 'mixed';
+    else if (has.text) aggregateType = 'text';
+    else if (has.large && !has.emoji) aggregateType = 'emoji-large';
+    else if (has.emoji) aggregateType = 'emoji';
+
+    return { type: aggregateType, text: allText, parts };
   }
 
   // 弹幕选择器（按优先级降序尝试）
