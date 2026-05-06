@@ -21,8 +21,7 @@
 (function () {
   'use strict';
 
-  // 仅在实际直播间页面运行（非 iframe、非 /all /p/ 等聚合页）
-  if (window.top !== window.self) return;
+  // 仅在实际直播间页面运行（非 /all /p/ 等聚合页）
   if (!/^\/\d+($|\/)/.test(location.pathname)) return;
 
   // --- 配置持久化 (GM_getValue → localStorage fallback) ---
@@ -179,10 +178,19 @@ fullscreen       : ${DBG.fullscreen}`;
   }
 
   function mountOverlay() {
+    // 无播放器容器则不挂载面板（activity iframe / 非直播间页面不会误创建）
     const r = root();
-    if (plusBtn.parentNode !== r) r.appendChild(plusBtn);
-    if (CONFIG.debug && debugPanel.parentNode !== r) r.appendChild(debugPanel);
-    if (dmSafeContainer.parentNode !== r) r.appendChild(dmSafeContainer);
+    const hasPlayer = !!findDmContainer();
+    if (hasPlayer) {
+      if (plusBtn.parentNode !== r) r.appendChild(plusBtn);
+      if (CONFIG.debug && debugPanel.parentNode !== r) r.appendChild(debugPanel);
+      if (dmSafeContainer.parentNode !== r) r.appendChild(dmSafeContainer);
+    } else {
+      // 播放器消失（下播/SPA离开）→ 卸载面板，避免残留
+      if (plusBtn.parentNode) plusBtn.remove();
+      if (debugPanel.parentNode) debugPanel.remove();
+      if (dmSafeContainer.parentNode) dmSafeContainer.remove();
+    }
   }
 
   function isElementAlive(el) {
