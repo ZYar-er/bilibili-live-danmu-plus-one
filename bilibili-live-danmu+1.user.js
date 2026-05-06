@@ -286,7 +286,8 @@ fullscreen       : ${DBG.fullscreen}`;
 
     if (parts.length === 0) return { type: 'unknown', text: '', parts };
 
-    const allText = parts.map(p => p.text).join('');
+    // 使用单空格拼接片段，尽量保留图文混排的可读空白语义
+    const allText = parts.map(p => p.text).join(' ').replace(/\s+/g, ' ').trim();
 
     let aggregateType = 'unknown';
     const hasEmoji = has.emoji || has.large;
@@ -562,7 +563,6 @@ fullscreen       : ${DBG.fullscreen}`;
       setDbg('lastErr', 'cooldown');
       return false;
     }
-    lastSendAt = now;
 
     const input = findInput();
     if (!input) {
@@ -573,6 +573,8 @@ fullscreen       : ${DBG.fullscreen}`;
     const finalText = CONFIG.appendPlusOne ? `${text} +1` : text;
     input.focus();
     setNativeValue(input, finalText);
+    // 仅在实际准备发送时写入冷却时间，避免失败请求占用冷却窗口
+    lastSendAt = now;
 
     const btn = findSendBtn();
     if (btn) {
