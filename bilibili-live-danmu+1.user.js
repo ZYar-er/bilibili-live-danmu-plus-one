@@ -75,6 +75,7 @@
   let moPending = false;
   let dmNodeList = [];
   let dmListDirty = true;
+  let dmObserverTarget = null;
   // rAF 内复用的 rect 快照，key = dm element，每帧重建
   let rectSnapshot = new WeakMap();
 
@@ -247,6 +248,7 @@ fullscreen       : ${DBG.fullscreen}`;
     'div[role="comment"][class*="danmaku"]',
     '.bili-danmaku-x-dm'
   ];
+  const DM_SELECTOR_JOINED = DM_SELECTORS.join(',');
 
   // 寻找弹幕所在容器，限定搜索范围
   function findDmContainer() {
@@ -255,6 +257,7 @@ fullscreen       : ${DBG.fullscreen}`;
 
   function refreshDmNodeListIfNeeded() {
     if (!dmListDirty) return;
+    bindMutationObserverTarget();
 
     const scope = findDmContainer() || document;
 
@@ -273,7 +276,35 @@ fullscreen       : ${DBG.fullscreen}`;
     setDbg('dmCount', 0);
   }
 
+  function isLikelyDmElement(el) {
+    if (!(el instanceof HTMLElement)) return false;
+    if (!el.matches(DM_SELECTOR_JOINED)) return false;
+    return true;
+  }
+
+  // 优先使用命中点链路，避免每次都全量扫描弹幕节点
+  function findHitFromPoint(x, y) {
+    const stack = document.elementsFromPoint(x, y);
+    for (let i = 0; i < stack.length; i++) {
+      const n = stack[i];
+      if (!(n instanceof HTMLElement)) continue;
+      const el = isLikelyDmElement(n) ? n : n.closest(DM_SELECTOR_JOINED);
+      if (!isLikelyDmElement(el)) continue;
+      if (!isVisibleDM(el)) continue;
+      const rect = el.getBoundingClientRect();
+      rectSnapshot.set(el, rect);
+      if (!pointInRect(x, y, rect, CONFIG.hitPaddingPx)) continue;
+      const payload = extractDmPayload(el);
+      if (!payload.text) continue;
+      return { el, text: payload.text, type: payload.type };
+    }
+    return null;
+  }
+
   function findHitLive(x, y) {
+    const pointHit = findHitFromPoint(x, y);
+    if (pointHit) return pointHit;
+
     refreshDmNodeListIfNeeded();
 
     for (let i = dmNodeList.length - 1; i >= 0; i--) {
@@ -528,11 +559,20 @@ fullscreen       : ${DBG.fullscreen}`;
 
   document.addEventListener('fullscreenchange', () => {
     mountOverlay();
+    bindMutationObserverTarget();
     setDbg('fullscreen', !!document.fullscreenElement);
     dmListDirty = true;
     mouseDirty = true;
     scheduleFrame();
   });
+
+  function bindMutationObserverTarget() {
+    const nextTarget = findDmContainer() || document.documentElement;
+    if (dmObserverTarget === nextTarget) return;
+    mo.disconnect();
+    dmObserverTarget = nextTarget;
+    mo.observe(dmObserverTarget, { childList: true, subtree: true });
+  }
 
   const mo = new MutationObserver(() => {
     dmListDirty = true;
@@ -552,7 +592,7 @@ fullscreen       : ${DBG.fullscreen}`;
       });
     }
   });
-  mo.observe(document.documentElement, { childList: true, subtree: true });
+  bindMutationObserverTarget();
 
   // --- 设置菜单（仅注册一次，不动态刷新标签） ---
   function registerMenus() {
@@ -600,6 +640,7 @@ fullscreen       : ${DBG.fullscreen}`;
   // init
   registerMenus();
   mountOverlay();
+  bindMutationObserverTarget();
   setDbg('fullscreen', !!document.fullscreenElement);
   setDbg('cooldownMs', CONFIG.cooldownMs);
   setDbg('enableSendCooldown', CONFIG.enableSendCooldown);
