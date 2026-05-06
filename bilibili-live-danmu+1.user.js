@@ -123,6 +123,16 @@
     display: ${CONFIG.debug ? 'block' : 'none'};
   `;
 
+  // B站 JS 清理定时器回收冻结弹幕时，移入此容器保持存活
+  const dmSafeContainer = document.createElement('div');
+  dmSafeContainer.style.cssText = `
+    position: fixed;
+    inset: 0;
+    overflow: visible;
+    pointer-events: none;
+    z-index: ${CONFIG.zIndexBtn - 1};
+  `;
+
   const DBG = {
     frame: 0,
     dmCount: 0,
@@ -167,6 +177,7 @@ fullscreen       : ${DBG.fullscreen}`;
     const r = root();
     if (plusBtn.parentNode !== r) r.appendChild(plusBtn);
     if (CONFIG.debug && debugPanel.parentNode !== r) r.appendChild(debugPanel);
+    if (dmSafeContainer.parentNode !== r) r.appendChild(dmSafeContainer);
   }
 
   function isElementAlive(el) {
@@ -370,12 +381,26 @@ fullscreen       : ${DBG.fullscreen}`;
     setDbg('frozen', true);
   }
 
+  function scheduleRescuedCleanup(el) {
+    // 安全容器内的元素恢复动画后，监听 animationend 自动移除
+    el.addEventListener('animationend', () => {
+      const active = el.getAnimations().filter(
+        a => a.playState === 'running' || a.playState === 'pending'
+      );
+      if (active.length === 0 && el.parentNode) el.remove();
+    });
+    // 保险兜底：30s 后仍存活则移除（animationend 可能因 pause 历史丢失）
+    setTimeout(() => { if (el.parentNode) el.remove(); }, 30000);
+  }
+
   function unfreeze(el) {
     if (!el) return;
     if (el.dataset.dm1Frozen !== '1') return;
+    const wasRescued = el.parentNode === dmSafeContainer;
     el.style.animationPlayState = el.dataset.dm1OldAnimPlay || '';
     delete el.dataset.dm1OldAnimPlay;
     delete el.dataset.dm1Frozen;
+    if (wasRescued) scheduleRescuedCleanup(el);
     setDbg('frozen', false);
   }
 
@@ -661,8 +686,20 @@ fullscreen       : ${DBG.fullscreen}`;
     mo.observe(dmObserverTarget, { childList: true, subtree: true });
   }
 
-  const mo = new MutationObserver(() => {
+  const mo = new MutationObserver((mutations) => {
     dmListDirty = true;
+
+    // 拦截 B站 JS 清理定时器移除的冻结弹幕 → 移入安全容器保持存活
+    for (let mi = 0; mi < mutations.length; mi++) {
+      const removed = mutations[mi].removedNodes;
+      for (let ri = 0; ri < removed.length; ri++) {
+        const node = removed[ri];
+        if (node.nodeType === Node.ELEMENT_NODE && node.dataset && node.dataset.dm1Frozen === '1') {
+          dmSafeContainer.appendChild(node);
+        }
+      }
+    }
+
     // 当前命中元素被 B站 JS 定时清理 → 保留 ghost，不隐藏按钮
     if (currentHit?.el && !isElementAlive(currentHit.el)) {
       markGhost();
