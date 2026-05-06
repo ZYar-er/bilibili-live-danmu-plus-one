@@ -21,6 +21,10 @@
 (function () {
   'use strict';
 
+  // 仅在实际直播间页面运行（非 iframe、非 /all /p/ 等聚合页）
+  if (window.top !== window.self) return;
+  if (!/^\/\d+($|\/)/.test(location.pathname)) return;
+
   // --- 配置持久化 (GM_getValue → localStorage fallback) ---
   function storageGet(key, def) {
     try { const v = GM_getValue(key); if (v !== void 0) return v; } catch (e) { /* ignore */ }
@@ -75,6 +79,7 @@
   let dmNodeList = [];
   let dmListDirty = true;
   let dmObserverTarget = null;
+  let noPlayerCount = 0; // 连续无播放器帧数，超阈值则降频
   // rAF 内复用的 rect 快照，key = dm element，每帧重建
   let rectSnapshot = new WeakMap();
 
@@ -592,14 +597,38 @@ fullscreen       : ${DBG.fullscreen}`;
     plusBtn.style.cursor = '';
   }
 
+  let lastTickTime = 0;
+
   function scheduleFrame() {
     if (rafScheduled) return;
+    // 未开播降频：mousemove 等事件仍会触发 scheduleFrame，限制最低间隔
+    if (noPlayerCount > 30) {
+      const now = performance.now();
+      if (now - lastTickTime < 2000) return;
+    }
     rafScheduled = true;
     requestAnimationFrame(tick);
   }
 
   function tick() {
     rafScheduled = false;
+    lastTickTime = performance.now();
+
+    // 未开播检测：无播放器容器且无弹幕节点 → 降频轮询
+    if (!findDmContainer() && dmNodeList.length === 0) {
+      noPlayerCount++;
+      if (noPlayerCount > 30) {
+        // ~0.5s 无播放器 → 切换到 2s 低频轮询，开播后恢复正常帧率
+        setTimeout(() => {
+          dmListDirty = true;
+          scheduleFrame();
+        }, 2000);
+        return;
+      }
+    } else {
+      noPlayerCount = 0;
+    }
+
     rectSnapshot = new WeakMap();
     // 每次 rAF 确保 overlay 挂载在正确的 root 下（SPA 路由切换时 root 可能被替换）
     mountOverlay();
