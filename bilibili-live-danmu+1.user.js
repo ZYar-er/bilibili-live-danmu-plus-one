@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         B站直播弹幕 +1
 // @name:zh-CN   B站直播弹幕 +1
-// @namespace    https://github.com/user/bilibili-live-danmu-plus-one
-// @version      0.7.0
+// @namespace    https://github.com/ZYar-er/bilibili-live-danmu-plus-one
+// @version      0.0.1
 // @description  鼠标悬停弹幕即可一键发送同款弹幕+1，支持文字/emoji/表情图片，可配置发送间隔
 // @description:zh-CN  鼠标悬停弹幕即可一键发送同款弹幕+1，支持文字/emoji/表情图片，可配置发送间隔
-// @author       user (https://github.com/user)
+// @author       ZYar-er
 // @license      MIT
 // @match        *://live.bilibili.com/0*
 // @match        *://live.bilibili.com/1*
@@ -21,10 +21,10 @@
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
 // @run-at       document-idle
-// @homepageURL  https://github.com/user/bilibili-live-danmu-plus-one
-// @supportURL   https://github.com/user/bilibili-live-danmu-plus-one/issues
-// @updateURL    https://github.com/user/bilibili-live-danmu-plus-one/raw/main/bilibili-live-danmu-plus-one.user.js
-// @downloadURL  https://github.com/user/bilibili-live-danmu-plus-one/raw/main/bilibili-live-danmu-plus-one.user.js
+// @homepageURL  https://github.com/ZYar-er/bilibili-live-danmu-plus-one
+// @supportURL   https://github.com/ZYar-er/bilibili-live-danmu-plus-one/issues
+// @updateURL    https://github.com/ZYar-er/bilibili-live-danmu-plus-one/raw/main/bilibili-live-danmu-plus-one.user.js
+// @downloadURL  https://github.com/ZYar-er/bilibili-live-danmu-plus-one/raw/main/bilibili-live-danmu-plus-one.user.js
 // ==/UserScript==
 
 (function () {
@@ -167,7 +167,7 @@
   function renderDebug() {
     if (!CONFIG.debug) return;
     debugPanel.textContent =
-`[DM+1 DEBUG v0.7.0]
+`[DM+1 DEBUG v0.0.1]
 frame            : ${DBG.frame}
 dmCount          : ${DBG.dmCount}
 mouse            : ${DBG.mouse}
@@ -809,5 +809,5 @@ fullscreen       : ${DBG.fullscreen}`;
   mouseDirty = true;
   scheduleFrame();
 
-  console.log('[DM+1] v0.7.0 loaded');
+  console.log('[DM+1] v0.0.1 loaded');
 })();

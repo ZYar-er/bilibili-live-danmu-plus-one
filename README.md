@@ -5,10 +5,14 @@
 
 鼠标悬停 B站直播弹幕，一键发送同款弹幕 +1。
 
+> **v0.0.1** — 大部分代码由 Claude Code (Anthropic) 辅助生成，人工审核与调优。
+
 ## 功能
 
 - **悬停即用** — 鼠标划过任意弹幕，弹出 `+1` 按钮，点击即发
-- **Emoji 支持** — 兼容文字 emoji、图片表情（B站自定义表情自动解析为 `[表情名]`）
+- **Emoji 支持** — 兼容文字 emoji、B站小表情和房间专属大表情，自动解析为 `[表情名]` 格式
+- **图文混合** — 正确处理 "哈哈哈[大笑]笑死" 等混合弹幕内容
+- **弹幕冻结恢复** — 悬停时弹幕冻结，移开后从冻结位置继续滚动直至自然消失
 - **发送冷却** — 可配置间隔防刷屏（默认 2s），也可关闭
 - **配置持久化** — 所有设置自动保存，刷新不丢失
 - **Tampermonkey 菜单** — 右键油猴图标直接修改设置，无需编辑代码
@@ -18,12 +22,12 @@
 ## 安装
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展
-2. 点击脚本文件 `bilibili-live-danmu-plus-one.user.js` → Tampermonkey 会自动弹出安装页面
+2. 打开脚本文件 `bilibili-live-danmu-plus-one.user.js` 的 Raw 链接 → Tampermonkey 弹出安装页面
 3. 点击「安装」即可
 
 ## 使用
 
-进入任意 B站直播间（`https://live.bilibili.com/*`）：
+进入任意 B站直播间（`https://live.bilibili.com/<房间号>`）：
 
 1. 鼠标移动到弹幕上 → 出现半透明 `+1` 按钮
 2. 点击按钮 → 自动填入弹幕内容并发送
@@ -36,7 +40,7 @@
 | 菜单项 | 说明 |
 |--------|------|
 | 切换发送冷却 | 开启/关闭发送间隔限制 |
-| 发送间隔 → 0.3s / 0.6s / ... | 选择冷却时间（无间隔 / 0.3s ~ 3.0s） |
+| 发送间隔 → 无间隔 / 0.3s / ... / 3.0s | 选择冷却时间 |
 | 切换按钮透明度 | 循环切换 30% → 50% → 70% → 80% → 95% |
 | 切换调试面板 | 显示/隐藏左上角调试信息 |
 | 重置所有设置 | 清除配置并刷新页面 |
@@ -48,11 +52,11 @@
 开启调试面板后，左上角会显示：
 
 ```
-[DM+1 DEBUG v0.7.0]
+[DM+1 DEBUG v0.0.1]
 frame            : 1234       # rAF 帧计数
 dmCount          : 35         # 当前页面的弹幕 DOM 数量
 mouse            : 640,480    # 鼠标坐标
-hitType          : text       # 当前命中的弹幕类型
+hitType          : text       # 当前命中的弹幕类型 (text/emoji/emoji-large/mixed)
 hitText          : 233333     # 当前命中的弹幕文字
 btnVisible       : true       # +1 按钮是否可见
 frozen           : true       # 当前弹幕动画是否暂停
@@ -64,30 +68,37 @@ cooldownMs       : 2000       # 冷却时间(ms)
 fullscreen       : false      # 是否全屏
 ```
 
-## 性能
-
-在典型直播间（50 条弹幕同时可见）下：
-
-- **CPU** — 每帧扫描开销 < 0.5ms，rAF 帧预算充足
-- **内存** — 稳定运行 1 小时后内存增长 < 1MB
-- **DOM 操作** — 仅在命中目标时写入样式，悬停空闲时零 DOM 写入
-
-> 可通过 Chrome DevTools → Performance 面板录制、或使用调试面板的 frame/dmCount 字段观测。
-
 ## 兼容性
 
 - Chrome 90+ / Edge 90+ / Firefox 90+
 - Tampermonkey ≥ 5.0
 - B站直播间（普通直播、赛事直播、全屏模式均测试通过）
 
+## 已知问题
+
+### 部分直播间出现双调试面板
+
+某些带有活动横幅（activity banner）的直播间页面会通过同源 iframe 嵌入额外内容，由于 `@match` 通配这些 iframe 的 URL，脚本会在 iframe 中重复执行，导致出现两个调试面板。
+
+**临时方案**：关闭调试面板（默认关闭），功能不受影响。
+
+**期望修复**：如果了解如何精确区分主页面与 activity iframe 的 DOM 环境，欢迎提交 PR 或 Issue 讨论。
+
 ## 开发
+
+本项目由 [Claude Code](https://claude.ai/code) (Anthropic) 辅助完成大部分代码编写，人工负责需求定义、功能验证与最终调优。
 
 ```
 bilibili-live-danmu-plus-one.user.js   # 插件本体（可直接安装到 Tampermonkey）
+reference/                             # 参考脚本（不纳入版本管理）
 ```
 
 修改后直接在 Tampermonkey 管理面板中编辑更新即可，无需构建工具。
 
+## 作者
+
+**ZYar-er** — [GitHub](https://github.com/ZYar-er)
+
 ## License
 
-MIT
+MIT — 详见 [LICENSE](LICENSE) 文件。
