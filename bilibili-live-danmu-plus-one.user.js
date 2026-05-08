@@ -78,6 +78,7 @@
     cooldownMsOptions: [0, 300, 600, 1200, 2000, 3000],
 
     appendPlusOne: false,
+    inferEmojiFromImageUrl: true,
 
     debug: storageGet('debug', false),
     btnOpacity: storageGet('btnOpacity', 0.8),
@@ -244,24 +245,31 @@ fullscreen       : ${DBG.fullscreen}`;
 
   // ==================== 弹幕内容提取 ====================
 
-  // B站表情文本已内置在属性中（如 alt="[摊手]"），直接读取即可
+  function inferEmojiNameFromSrc(src) {
+    if (!src) return '';
+    try {
+      const u = new URL(src, location.href);
+      const file = (u.pathname || '').split('/').pop() || '';
+      const name = file.split('.')[0] || '';
+      return name ? `[emoji:${name}]` : '';
+    } catch {
+      return '';
+    }
+  }
+
   function getEmojiCode(img) {
-    const attr = img.getAttribute('alt')
-      || img.getAttribute('title')
-      || img.getAttribute('aria-label');
-    return (attr && attr.trim()) || EMOJI_FALLBACK;
+    const attr = img.getAttribute('alt') || img.getAttribute('title') || img.getAttribute('aria-label');
+    if (attr?.trim()) return attr.trim();
+    if (CONFIG.inferEmojiFromImageUrl) {
+      const inferred = inferEmojiNameFromSrc(img.getAttribute('src') || '');
+      if (inferred) return inferred;
+    }
+    return EMOJI_FALLBACK;
   }
 
   function extractDmPayload(el) {
     const parts = [];
     const has = { text: false, emoji: false, large: false };
-
-    function addEmoji(img) {
-      const code = getEmojiCode(img);
-      const isLarge = !!img.closest('.emote--bulge');
-      parts.push({ type: isLarge ? 'emoji-large' : 'emoji', text: code });
-      if (isLarge) has.large = true; else has.emoji = true;
-    }
 
     function walk(node) {
       for (let child = node.firstChild; child; child = child.nextSibling) {
@@ -270,17 +278,20 @@ fullscreen       : ${DBG.fullscreen}`;
           if (t) { parts.push({ type: 'text', text: t }); has.text = true; }
         } else if (child.nodeType === Node.ELEMENT_NODE) {
           if (child.matches && child.matches('img.emote')) {
-            addEmoji(child);
-          } else if (child.querySelector) {
-            // 查询容器内所有表情图片，支持多表情
-            const imgs = child.querySelectorAll('img.emote');
-            if (imgs.length > 0) {
-              imgs.forEach(addEmoji);
+            const code = getEmojiCode(child);
+            const isLarge = !!child.closest('.emote--bulge');
+            parts.push({ type: isLarge ? 'emoji-large' : 'emoji', text: code });
+            if (isLarge) has.large = true; else has.emoji = true;
+          } else {
+            const innerImg = child.querySelector && child.querySelector('img.emote');
+            if (innerImg) {
+              const code = getEmojiCode(innerImg);
+              const isLarge = !!innerImg.closest('.emote--bulge');
+              parts.push({ type: isLarge ? 'emoji-large' : 'emoji', text: code });
+              if (isLarge) has.large = true; else has.emoji = true;
             } else {
               walk(child);
             }
-          } else {
-            walk(child);
           }
         }
       }
@@ -396,28 +407,21 @@ fullscreen       : ${DBG.fullscreen}`;
   }
 
   function clearCurrentHit() {
-    const el = state.currentHit?.el;
-    if (el && isElementAlive(el)) {
-      const inSafe = el.parentNode === dmSafeContainer;
-      unfreeze(el);
-      if (inSafe) el.remove();  // ghost 弹幕从安全容器移除
-    }
+    if (state.currentHit?.el && isElementAlive(state.currentHit.el)) unfreeze(state.currentHit.el);
     state.currentHit = null;
     setDbg('hitText', '');
     setDbg('hitType', '');
     setDbg('currentConnected', false);
   }
 
-  // 弹幕被 B站 JS 清理 → 元素移入安全容器，保留弹幕 + 按钮
   function markGhost() {
     if (!state.currentHit || !state.currentHit.text) return;
     if (state.currentHit.lastRect) return;
-    const el = state.currentHit.el;
-    if (el && el.isConnected) {
-      const r = el.getBoundingClientRect();
+    if (state.currentHit.el && state.currentHit.el.getBoundingClientRect) {
+      const r = state.currentHit.el.getBoundingClientRect();
       if (r.width > 0) state.currentHit.lastRect = r;
-      dmSafeContainer.appendChild(el);
     }
+    state.currentHit.el = null;
     setDbg('currentConnected', false);
   }
 
