@@ -78,7 +78,6 @@
     cooldownMsOptions: [0, 300, 600, 1200, 2000, 3000],
 
     appendPlusOne: false,
-    inferEmojiFromImageUrl: true,
 
     debug: storageGet('debug', false),
     btnOpacity: storageGet('btnOpacity', 0.8),
@@ -245,25 +244,10 @@ fullscreen       : ${DBG.fullscreen}`;
 
   // ==================== 弹幕内容提取 ====================
 
-  function inferEmojiNameFromSrc(src) {
-    if (!src) return '';
-    try {
-      const u = new URL(src, location.href);
-      const file = (u.pathname || '').split('/').pop() || '';
-      const name = file.split('.')[0] || '';
-      return name ? `[emoji:${name}]` : '';
-    } catch {
-      return '';
-    }
-  }
-
+  // B站表情文本已内置在属性中（如 alt="[摊手]"），直接读取即可
   function getEmojiCode(img) {
     const attr = img.getAttribute('alt') || img.getAttribute('title') || img.getAttribute('aria-label');
     if (attr?.trim()) return attr.trim();
-    if (CONFIG.inferEmojiFromImageUrl) {
-      const inferred = inferEmojiNameFromSrc(img.getAttribute('src') || '');
-      if (inferred) return inferred;
-    }
     return EMOJI_FALLBACK;
   }
 
@@ -407,21 +391,27 @@ fullscreen       : ${DBG.fullscreen}`;
   }
 
   function clearCurrentHit() {
-    if (state.currentHit?.el && isElementAlive(state.currentHit.el)) unfreeze(state.currentHit.el);
+    if (state.currentHit?.el && isElementAlive(state.currentHit.el)) {
+      const inSafe = state.currentHit.el.parentNode === dmSafeContainer;
+      unfreeze(state.currentHit.el);
+      if (inSafe) state.currentHit.el.remove();  // ghost 弹幕移出安全容器
+    }
     state.currentHit = null;
     setDbg('hitText', '');
     setDbg('hitType', '');
     setDbg('currentConnected', false);
   }
 
+  // 弹幕被 B站 JS 清理 → 元素移入安全容器保持存活，按钮和弹幕一起保留
   function markGhost() {
     if (!state.currentHit || !state.currentHit.text) return;
-    if (state.currentHit.lastRect) return;
-    if (state.currentHit.el && state.currentHit.el.getBoundingClientRect) {
-      const r = state.currentHit.el.getBoundingClientRect();
+    if (state.currentHit.lastRect) return;  // 已是 ghost
+    const el = state.currentHit.el;
+    if (el && el.isConnected) {
+      const r = el.getBoundingClientRect();
       if (r.width > 0) state.currentHit.lastRect = r;
+      dmSafeContainer.appendChild(el);  // 拯救到安全容器
     }
-    state.currentHit.el = null;
     setDbg('currentConnected', false);
   }
 
