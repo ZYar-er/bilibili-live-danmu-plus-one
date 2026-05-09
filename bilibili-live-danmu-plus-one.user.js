@@ -403,22 +403,28 @@ fullscreen       : ${DBG.fullscreen}`;
 
   // ==================== 弹幕节点事件绑定 ====================
 
-  var overBtn = false;  // 鼠标是否在 +1 按钮上
+  var leaveTimer = 0;  // 延迟隐藏定时器
 
   function findDmContainer() {
-    return document.querySelector(DANMU_CONTAINER_SELECTORS);
+    // 全屏时优先搜索全屏元素内部
+    var scope = document.fullscreenElement || document;
+    return scope.querySelector(DANMU_CONTAINER_SELECTORS);
   }
 
   function isDanmuNode(node) {
     if (node.nodeType !== Node.ELEMENT_NODE) return false;
     if (!(node instanceof HTMLElement)) return false;
     var cls = node.classList;
-    return cls.contains('bili-danmaku-x-dm') || cls.contains('danmaku-info-row');
+    return cls.contains('bili-danmaku-x-dm')
+      || cls.contains('bili-danmaku-x-roll')
+      || cls.contains('danmaku-info-row');
   }
+
+  var DM_SCAN_SEL = '.bili-danmaku-x-dm, .bili-danmaku-x-roll, .danmaku-info-row';
 
   function scanAndBind(root) {
     if (!root.querySelectorAll) return;
-    var nodes = root.querySelectorAll('.bili-danmaku-x-dm, .danmaku-info-row');
+    var nodes = root.querySelectorAll(DM_SCAN_SEL);
     for (var i = 0; i < nodes.length; i++) {
       attachDanmuEvents(nodes[i]);
     }
@@ -435,6 +441,9 @@ fullscreen       : ${DBG.fullscreen}`;
     el.style.pointerEvents = 'auto';
 
     el.addEventListener('mouseenter', function () {
+      // 取消任何待执行的 leave 隐藏
+      if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = 0; }
+
       var payload = getDmText(el);
       if (!payload.text) return;
 
@@ -449,28 +458,28 @@ fullscreen       : ${DBG.fullscreen}`;
       showBtn(el);
     });
 
-    el.addEventListener('mouseleave', function (e) {
-      // 如果鼠标移到了 +1 按钮上，不隐藏
-      if (e.relatedTarget === plusBtn || (plusBtn.contains && plusBtn.contains(e.relatedTarget))) {
-        return;
-      }
-      hideBtn();
-      clearCurrentHit();
+    el.addEventListener('mouseleave', function () {
+      // 延迟隐藏，给鼠标移到按钮上的时间
+      leaveTimer = setTimeout(function () {
+        leaveTimer = 0;
+        hideBtn();
+        clearCurrentHit();
+      }, 50);
     });
   }
 
-  // 按钮 hover 处理：防止从弹幕移到按钮时触发 leave
+  // 按钮 hover：取消离开弹幕的延迟隐藏
   plusBtn.addEventListener('mouseenter', function () {
-    overBtn = true;
+    if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = 0; }
   });
 
-  plusBtn.addEventListener('mouseleave', function (e) {
-    overBtn = false;
-    // 如果离开了按钮且没有回到弹幕，则隐藏
-    var hit = state.currentHit;
-    if (hit && hit.el && isElementAlive(hit.el) && e.relatedTarget === hit.el) return;
-    hideBtn();
-    clearCurrentHit();
+  plusBtn.addEventListener('mouseleave', function () {
+    // 离开按钮 → 延迟隐藏（鼠标可能回到弹幕）
+    leaveTimer = setTimeout(function () {
+      leaveTimer = 0;
+      hideBtn();
+      clearCurrentHit();
+    }, 50);
   });
 
   // ==================== 主渲染循环 ====================
@@ -488,7 +497,9 @@ fullscreen       : ${DBG.fullscreen}`;
   }
 
   function handleNoPlayer() {
-    if (!findDmContainer()) {
+    // 全屏时搜索范围是全屏元素，否则是 document
+    var scope = document.fullscreenElement || document;
+    if (!scope.querySelector(DANMU_CONTAINER_SELECTORS)) {
       state.noPlayerCount++;
       if (state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) {
         setTimeout(function () { scheduleFrame(); }, TIMING.LOW_FREQ_POLL_MS);
@@ -560,16 +571,17 @@ fullscreen       : ${DBG.fullscreen}`;
     if (state.dmObserverTarget && !state.dmObserverTarget.isConnected) {
       state.dmObserverTarget = null;
     }
-    var nextTarget = findDmContainer()
-      || document.querySelector(PLAYER_SELECTORS)
-      || document.documentElement;
+    var scope = document.fullscreenElement || document;
+    var nextTarget = scope.querySelector(DANMU_CONTAINER_SELECTORS)
+      || scope.querySelector(PLAYER_SELECTORS)
+      || scope;
     if (state.dmObserverTarget === nextTarget) return;
     mo.disconnect();
     state.dmObserverTarget = nextTarget;
     mo.observe(state.dmObserverTarget, { childList: true, subtree: true });
 
     // 新目标可能已有弹幕，立即扫描
-    if (nextTarget !== document.documentElement) {
+    if (nextTarget !== document.documentElement && nextTarget !== scope) {
       scanAndBind(nextTarget);
     }
   }
