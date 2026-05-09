@@ -52,11 +52,7 @@
 
   const EMOJI_FALLBACK = '[表情]';
 
-  const DANMU_CONTAINER_SELECTORS = [
-    '.bili-danmaku-x-dm',
-    '.live-player-dm-wrap',
-    '.bilibili-live-player-video-danmaku',
-  ];
+  const DANMU_CONTAINER_SELECTORS = '.bili-danmaku-x-dm';
 
   const PLAYER_SELECTORS = '.bilibili-live-player-video, #live-player, .live-player-container';
 
@@ -410,11 +406,7 @@ fullscreen       : ${DBG.fullscreen}`;
   var overBtn = false;  // 鼠标是否在 +1 按钮上
 
   function findDmContainer() {
-    for (var i = 0; i < DANMU_CONTAINER_SELECTORS.length; i++) {
-      var el = document.querySelector(DANMU_CONTAINER_SELECTORS[i]);
-      if (el) return el;
-    }
-    return null;
+    return document.querySelector(DANMU_CONTAINER_SELECTORS);
   }
 
   function isDanmuNode(node) {
@@ -515,6 +507,8 @@ fullscreen       : ${DBG.fullscreen}`;
     if (handleNoPlayer()) return;
 
     mountOverlay();
+    // 持续检测 MO 目标存活，B站会不断重建 danmaku 容器
+    bindMutationObserverTarget();
     setDbg('frame', DBG.frame + 1);
 
     // 按钮跟随弹幕位置更新
@@ -556,17 +550,28 @@ fullscreen       : ${DBG.fullscreen}`;
 
   document.addEventListener('fullscreenchange', function () {
     mountOverlay();
-    bindMutationObserverTarget();
     setDbg('fullscreen', !!document.fullscreenElement);
+    state.dmObserverTarget = null; // 强制下一帧重新查找容器
     scheduleFrame();
   });
 
   function bindMutationObserverTarget() {
-    var nextTarget = findDmContainer() || document.documentElement;
+    // B站会不断重建 danmaku 容器，检测当前目标是否已断连
+    if (state.dmObserverTarget && !state.dmObserverTarget.isConnected) {
+      state.dmObserverTarget = null;
+    }
+    var nextTarget = findDmContainer()
+      || document.querySelector(PLAYER_SELECTORS)
+      || document.documentElement;
     if (state.dmObserverTarget === nextTarget) return;
     mo.disconnect();
     state.dmObserverTarget = nextTarget;
     mo.observe(state.dmObserverTarget, { childList: true, subtree: true });
+
+    // 新目标可能已有弹幕，立即扫描
+    if (nextTarget !== document.documentElement) {
+      scanAndBind(nextTarget);
+    }
   }
 
   var mo = new MutationObserver(function (mutations) {
