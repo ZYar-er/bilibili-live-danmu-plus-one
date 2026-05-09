@@ -407,6 +407,8 @@ fullscreen       : ${DBG.fullscreen}`;
 
   // ==================== 弹幕节点事件绑定 ====================
 
+  var overBtn = false;  // 鼠标是否在 +1 按钮上
+
   function findDmContainer() {
     for (var i = 0; i < DANMU_CONTAINER_SELECTORS.length; i++) {
       var el = document.querySelector(DANMU_CONTAINER_SELECTORS[i]);
@@ -418,11 +420,21 @@ fullscreen       : ${DBG.fullscreen}`;
   function isDanmuNode(node) {
     if (node.nodeType !== Node.ELEMENT_NODE) return false;
     if (!(node instanceof HTMLElement)) return false;
-    var cls = Array.from(node.classList);
-    return cls.indexOf('bili-danmaku-x-dm') !== -1 || cls.indexOf('danmaku-info-row') !== -1;
+    var cls = node.classList;
+    return cls.contains('bili-danmaku-x-dm') || cls.contains('danmaku-info-row');
+  }
+
+  function scanAndBind(root) {
+    if (!root.querySelectorAll) return;
+    var nodes = root.querySelectorAll('.bili-danmaku-x-dm, .danmaku-info-row');
+    for (var i = 0; i < nodes.length; i++) {
+      attachDanmuEvents(nodes[i]);
+    }
+    setDbg('dmCount', DBG.dmCount);
   }
 
   function attachDanmuEvents(el) {
+    if (!(el instanceof HTMLElement)) return;
     if (el.dataset.dm1Bound === '1') return;
     el.dataset.dm1Bound = '1';
 
@@ -434,6 +446,9 @@ fullscreen       : ${DBG.fullscreen}`;
       var payload = getDmText(el);
       if (!payload.text) return;
 
+      if (state.currentHit && state.currentHit.el === el) return;
+      if (state.currentHit) { hideBtn(); clearCurrentHit(); }
+
       state.currentHit = { el: el, text: payload.text, type: payload.type };
       freeze(el);
       setDbg('hitText', payload.text);
@@ -442,11 +457,29 @@ fullscreen       : ${DBG.fullscreen}`;
       showBtn(el);
     });
 
-    el.addEventListener('mouseleave', function () {
+    el.addEventListener('mouseleave', function (e) {
+      // 如果鼠标移到了 +1 按钮上，不隐藏
+      if (e.relatedTarget === plusBtn || (plusBtn.contains && plusBtn.contains(e.relatedTarget))) {
+        return;
+      }
       hideBtn();
       clearCurrentHit();
     });
   }
+
+  // 按钮 hover 处理：防止从弹幕移到按钮时触发 leave
+  plusBtn.addEventListener('mouseenter', function () {
+    overBtn = true;
+  });
+
+  plusBtn.addEventListener('mouseleave', function (e) {
+    overBtn = false;
+    // 如果离开了按钮且没有回到弹幕，则隐藏
+    var hit = state.currentHit;
+    if (hit && hit.el && isElementAlive(hit.el) && e.relatedTarget === hit.el) return;
+    hideBtn();
+    clearCurrentHit();
+  });
 
   // ==================== 主渲染循环 ====================
 
@@ -541,12 +574,16 @@ fullscreen       : ${DBG.fullscreen}`;
       var added = mutations[mi].addedNodes;
       var removed = mutations[mi].removedNodes;
 
-      // 新弹幕节点 → 绑定事件
+      // 新弹幕节点 → 扫描 addedNodes 及其子孙，避免批量注入时遗漏
       for (var ai = 0; ai < added.length; ai++) {
         var node = added[ai];
         if (isDanmuNode(node)) {
           attachDanmuEvents(node);
-          setDbg('dmCount', DBG.dmCount + 1);
+          DBG.dmCount++;
+        }
+        // 检查 addedNode 是否包含弹幕子节点（B站可能批量添加容器）
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          scanAndBind(node);
         }
       }
 
@@ -626,6 +663,16 @@ fullscreen       : ${DBG.fullscreen}`;
   setDbg('cooldownMs', CONFIG.cooldownMs);
   setDbg('enableSendCooldown', CONFIG.enableSendCooldown);
   renderDebug();
+
+  // 初始扫描已存在的弹幕节点
+  var container = findDmContainer();
+  if (container) scanAndBind(container);
+
+  // 定期兜底扫描，捕获 MutationObserver 遗漏的节点
+  setInterval(function () {
+    var c = findDmContainer();
+    if (c) scanAndBind(c);
+  }, 2000);
 
   scheduleFrame();
 
