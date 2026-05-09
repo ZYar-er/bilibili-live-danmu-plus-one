@@ -52,12 +52,13 @@
 
   const EMOJI_FALLBACK = '[表情]';
 
-  const DM_SELECTORS = [
-    'div[role="comment"].bili-danmaku-x-dm',
-    'div[role="comment"][class*="danmaku"]',
-    '.bili-danmaku-x-dm'
+  const DANMU_CONTAINER_SELECTORS = [
+    '.bili-danmaku-x-dm',
+    '.live-player-dm-wrap',
+    '.bilibili-live-player-video-danmaku',
   ];
-  const DM_SELECTOR_JOINED = DM_SELECTORS.join(',');
+
+  const PLAYER_SELECTORS = '.bilibili-live-player-video, #live-player, .live-player-container';
 
   // ==================== 配置持久化 ====================
 
@@ -78,7 +79,6 @@
     cooldownMsOptions: [0, 300, 600, 1200, 2000, 3000],
 
     appendPlusOne: false,
-    inferEmojiFromImageUrl: true,
 
     debug: storageGet('debug', false),
     btnOpacity: storageGet('btnOpacity', 0.8),
@@ -87,22 +87,16 @@
   // ==================== 运行时状态 ====================
 
   const state = {
-    currentHit: null,       // {el, text, type, rect, lastRect}
+    currentHit: null,       // {el, text, type}
     lastSendAt: 0,
     lastClickAt: 0,
     clickLocked: false,
 
-    mouse: { x: 0, y: 0 },
-    mouseDirty: false,
+    mouse: { x: 0, y: 0 },  // 仅用于 debug 显示
 
     rafScheduled: false,
-    moPending: false,
-    dmNodeList: [],
-    dmListDirty: true,
-    dmObserverTarget: null,
     noPlayerCount: 0,
-
-    rectSnapshot: new WeakMap(),  // 每帧重建，缓存元素 getBoundingClientRect
+    dmObserverTarget: null,
   };
 
   // ==================== DOM 元素 ====================
@@ -152,7 +146,6 @@
     display: ${CONFIG.debug ? 'block' : 'none'};
   `;
 
-  // B站 JS 清理定时器回收冻结弹幕时，移入此容器保持存活
   const dmSafeContainer = document.createElement('div');
   dmSafeContainer.style.cssText = `
     position: fixed;
@@ -217,7 +210,8 @@ fullscreen       : ${DBG.fullscreen}`;
     return !!(el && el.isConnected);
   }
 
-  function pointInRect(x, y, r, p = 0) {
+  function pointInRect(x, y, r, p) {
+    p = p || 0;
     return x >= r.left - p && x <= r.right + p && y >= r.top - p && y <= r.bottom + p;
   }
 
@@ -225,156 +219,44 @@ fullscreen       : ${DBG.fullscreen}`;
     return Math.max(min, Math.min(max, v));
   }
 
-  function isVisibleDM(el) {
-    if (!isElementAlive(el)) return false;
-    const ds = el.style.display;
-    const vs = el.style.visibility;
-    if (ds === 'none' || vs === 'hidden') return false;
-    const cs = getComputedStyle(el);
-    if (cs.display === 'none' || cs.visibility === 'hidden') return false;
-    if (parseFloat(cs.opacity || '1') < 0.05) return false;
-    const r = el.getBoundingClientRect();
-    if (r.width <= 4 || r.height <= 4) return false;
-    if (r.right < 0 || r.bottom < 0 || r.left > innerWidth || r.top > innerHeight) return false;
-    return true;
-  }
-
-  function isLikelyDmElement(el) {
-    return el instanceof HTMLElement && el.matches(DM_SELECTOR_JOINED);
-  }
-
   // ==================== 弹幕内容提取 ====================
 
-  function inferEmojiNameFromSrc(src) {
-    if (!src) return '';
-    try {
-      const u = new URL(src, location.href);
-      const file = (u.pathname || '').split('/').pop() || '';
-      const name = file.split('.')[0] || '';
-      return name ? `[emoji:${name}]` : '';
-    } catch {
-      return '';
-    }
-  }
-
-  function getEmojiCode(img) {
-    const attr = img.getAttribute('alt') || img.getAttribute('title') || img.getAttribute('aria-label');
-    if (attr?.trim()) return attr.trim();
-    if (CONFIG.inferEmojiFromImageUrl) {
-      const inferred = inferEmojiNameFromSrc(img.getAttribute('src') || '');
-      if (inferred) return inferred;
-    }
-    return EMOJI_FALLBACK;
-  }
-
-  function extractDmPayload(el) {
+  function getDmText(el) {
     const parts = [];
-    const has = { text: false, emoji: false, large: false };
-
-    function walk(node) {
-      for (let child = node.firstChild; child; child = child.nextSibling) {
-        if (child.nodeType === Node.TEXT_NODE) {
-          const t = child.textContent.replace(/\s+/g, ' ').trim();
-          if (t) { parts.push({ type: 'text', text: t }); has.text = true; }
-        } else if (child.nodeType === Node.ELEMENT_NODE) {
-          if (child.matches && child.matches('img.emote')) {
-            const code = getEmojiCode(child);
-            const isLarge = !!child.closest('.emote--bulge');
-            parts.push({ type: isLarge ? 'emoji-large' : 'emoji', text: code });
-            if (isLarge) has.large = true; else has.emoji = true;
-          } else {
-            const innerImg = child.querySelector && child.querySelector('img.emote');
-            if (innerImg) {
-              const code = getEmojiCode(innerImg);
-              const isLarge = !!innerImg.closest('.emote--bulge');
-              parts.push({ type: isLarge ? 'emoji-large' : 'emoji', text: code });
-              if (isLarge) has.large = true; else has.emoji = true;
-            } else {
-              walk(child);
-            }
-          }
-        }
+    el.childNodes.forEach(function (child) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        var t = child.textContent.replace(/\s+/g, ' ').trim();
+        if (t) parts.push({ type: 'text', value: t });
+      } else if (child.tagName === 'IMG') {
+        // 大表情：data-name 或 alt 存表情名
+        var name = child.dataset.name || child.getAttribute('alt') || '';
+        parts.push({ type: 'emoji', value: name ? '[' + name + ']' : EMOJI_FALLBACK });
+      } else if (child.tagName === 'SPAN' && child.classList.contains('emoji')) {
+        // 小表情
+        parts.push({ type: 'emoji-sm', value: child.textContent });
       }
-    }
+    });
 
-    walk(el);
+    if (parts.length === 0) return '';
 
-    if (parts.length === 0) return { type: 'unknown', text: '', parts };
+    var text = parts.map(function (p) { return p.value; }).join(' ').replace(/\s+/g, ' ').trim();
 
-    const allText = parts.map(p => p.text).join(' ').replace(/\s+/g, ' ').trim();
+    var hasText = false;
+    var hasEmoji = false;
+    parts.forEach(function (p) {
+      if (p.type === 'text') hasText = true;
+      if (p.type === 'emoji' || p.type === 'emoji-sm') hasEmoji = true;
+    });
 
-    let aggregateType = 'unknown';
-    const hasEmoji = has.emoji || has.large;
-    if (has.text && hasEmoji) aggregateType = 'mixed';
-    else if (has.text) aggregateType = 'text';
-    else if (has.large && !has.emoji) aggregateType = 'emoji-large';
-    else if (has.emoji) aggregateType = 'emoji';
+    var type = 'unknown';
+    if (hasText && hasEmoji) type = 'mixed';
+    else if (hasText) type = 'text';
+    else if (hasEmoji) type = 'emoji';
 
-    return { type: aggregateType, text: allText, parts };
+    return { type: type, text: text, parts: parts };
   }
 
-  // ==================== 弹幕检测 ====================
-
-  function findDmContainer() {
-    return document.querySelector('.bilibili-live-player-video, #live-player, .live-player-container');
-  }
-
-  function refreshDmNodeListIfNeeded() {
-    if (!state.dmListDirty) return;
-    bindMutationObserverTarget();
-
-    const scope = findDmContainer() || document;
-
-    for (let i = 0; i < DM_SELECTORS.length; i++) {
-      const nodes = Array.from(scope.querySelectorAll(DM_SELECTORS[i]));
-      if (nodes.length > 0) {
-        state.dmNodeList = nodes;
-        state.dmListDirty = false;
-        setDbg('dmCount', state.dmNodeList.length);
-        return;
-      }
-    }
-
-    state.dmNodeList = [];
-    state.dmListDirty = false;
-    setDbg('dmCount', 0);
-  }
-
-  // 统一命中检测：先走 elementsFromPoint 快路径，失败则全量扫描
-  function findHit(x, y) {
-    const stack = document.elementsFromPoint(x, y);
-    for (let i = 0; i < stack.length; i++) {
-      const n = stack[i];
-      if (!(n instanceof HTMLElement)) continue;
-      const el = isLikelyDmElement(n) ? n : n.closest(DM_SELECTOR_JOINED);
-      if (!isLikelyDmElement(el)) continue;
-      if (!isVisibleDM(el)) continue;
-      const rect = el.getBoundingClientRect();
-      state.rectSnapshot.set(el, rect);
-      if (!pointInRect(x, y, rect, UI.HIT_PADDING_PX)) continue;
-      const payload = extractDmPayload(el);
-      if (!payload.text) continue;
-      return { el, text: payload.text, type: payload.type };
-    }
-
-    // 回退：遍历全量弹幕节点
-    refreshDmNodeListIfNeeded();
-    for (let i = state.dmNodeList.length - 1; i >= 0; i--) {
-      const el = state.dmNodeList[i];
-      if (!(el instanceof HTMLElement)) continue;
-      if (!isVisibleDM(el)) continue;
-      const rect = el.getBoundingClientRect();
-      state.rectSnapshot.set(el, rect);
-      if (!pointInRect(x, y, rect, UI.HIT_PADDING_PX)) continue;
-      const payload = extractDmPayload(el);
-      if (!payload.text) continue;
-      return { el, text: payload.text, type: payload.type };
-    }
-
-    return null;
-  }
-
-  // ==================== 冻结 / 解冻 / 幽灵模式 ====================
+  // ==================== 冻结 / 解冻 ====================
 
   function freeze(el) {
     if (!isElementAlive(el)) return;
@@ -382,23 +264,19 @@ fullscreen       : ${DBG.fullscreen}`;
     el.dataset.dm1Frozen = '1';
     el.dataset.dm1OldAnimPlay = el.style.animationPlayState || '';
     el.style.setProperty('animation-play-state', 'paused', 'important');
-    if (state.currentHit) state.currentHit.lastRect = el.getBoundingClientRect();
     setDbg('frozen', true);
   }
 
   function scheduleRescuedCleanup(el) {
-    el.addEventListener('animationend', () => {
-      const active = el.getAnimations().filter(
-        a => a.playState === 'running' || a.playState === 'pending'
-      );
-      if (active.length === 0 && el.parentNode) el.remove();
+    el.addEventListener('animationend', function () {
+      if (el.parentNode) el.remove();
     });
-    setTimeout(() => { if (el.parentNode) el.remove(); }, TIMING.GHOST_CLEANUP_MS);
+    setTimeout(function () { if (el.parentNode) el.remove(); }, TIMING.GHOST_CLEANUP_MS);
   }
 
   function unfreeze(el) {
     if (!el || el.dataset.dm1Frozen !== '1') return;
-    const wasRescued = el.parentNode === dmSafeContainer;
+    var wasRescued = el.parentNode === dmSafeContainer;
     el.style.animationPlayState = el.dataset.dm1OldAnimPlay || '';
     delete el.dataset.dm1OldAnimPlay;
     delete el.dataset.dm1Frozen;
@@ -407,52 +285,37 @@ fullscreen       : ${DBG.fullscreen}`;
   }
 
   function clearCurrentHit() {
-    if (state.currentHit?.el && isElementAlive(state.currentHit.el)) unfreeze(state.currentHit.el);
+    var el = state.currentHit && state.currentHit.el;
+    if (el && isElementAlive(el)) {
+      unfreeze(el);
+      if (el.parentNode === dmSafeContainer) el.remove();
+    }
     state.currentHit = null;
     setDbg('hitText', '');
     setDbg('hitType', '');
     setDbg('currentConnected', false);
   }
 
-  function markGhost() {
-    if (!state.currentHit || !state.currentHit.text) return;
-    if (state.currentHit.lastRect) return;
-    if (state.currentHit.el && state.currentHit.el.getBoundingClientRect) {
-      const r = state.currentHit.el.getBoundingClientRect();
-      if (r.width > 0) state.currentHit.lastRect = r;
-    }
-    state.currentHit.el = null;
-    setDbg('currentConnected', false);
-  }
-
   // ==================== 按钮控制 ====================
 
-  // 统一弹幕 rect 获取（ghost 用 lastRect，live 用 snapshot / getBoundingClientRect）
-  function getHitRect(hit) {
-    if (!hit.el) return hit.lastRect || null;
-    if (!isElementAlive(hit.el)) return null;
-    return state.rectSnapshot.get(hit.el) || hit.el.getBoundingClientRect();
-  }
+  function placeBtn(el) {
+    if (!el || !isElementAlive(el)) return;
+    var r = el.getBoundingClientRect();
+    if (r.width <= 4) return;
 
-  function placeBtn(hit) {
-    if (!hit) return;
-    const r = getHitRect(hit);
-    if (!r) return;
-
-    let x = r.left + r.width * UI.HORIZONTAL_RATIO;
-    let y = r.top + r.height / 2;
-
-    const m = UI.MARGIN_PX;
+    var x = r.left + r.width * UI.HORIZONTAL_RATIO;
+    var y = r.top + r.height / 2;
+    var m = UI.MARGIN_PX;
     x = clamp(x, m + UI.BTN_APPROX_W / 2, innerWidth - m - UI.BTN_APPROX_W / 2);
     y = clamp(y, m + UI.BTN_APPROX_H / 2, innerHeight - m - UI.BTN_APPROX_H / 2);
 
-    plusBtn.style.left = `${x}px`;
-    plusBtn.style.top = `${y}px`;
+    plusBtn.style.left = x + 'px';
+    plusBtn.style.top = y + 'px';
   }
 
-  function showBtn(hit) {
+  function showBtn(el) {
     mountOverlay();
-    placeBtn(hit);
+    placeBtn(el);
     plusBtn.style.display = 'block';
     setDbg('btnVisible', true);
   }
@@ -462,38 +325,12 @@ fullscreen       : ${DBG.fullscreen}`;
     setDbg('btnVisible', false);
   }
 
-  function refreshHoverState() {
-    const hit = state.currentHit;
-    if (!hit) { hideBtn(); return; }
-
-    // 元素已断开 → 转 ghost，下次 tick 重试
-    if (hit.el && !isElementAlive(hit.el)) {
-      markGhost();
-      return;
-    }
-
-    const r = getHitRect(hit);
-    if (!r) { hideBtn(); clearCurrentHit(); return; }
-
-    const inDanmaku = pointInRect(state.mouse.x, state.mouse.y, r, UI.HIT_PADDING_PX);
-    const br = plusBtn.getBoundingClientRect();
-    const inBtn = plusBtn.style.display === 'block' && pointInRect(state.mouse.x, state.mouse.y, br, 0);
-
-    if (inDanmaku || inBtn) {
-      if (plusBtn.style.display !== 'block') showBtn(hit);
-      return;
-    }
-
-    hideBtn();
-    clearCurrentHit();
-  }
-
   // ==================== 弹幕发送 ====================
 
   function setNativeValue(el, value) {
-    const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-    const desc = Object.getOwnPropertyDescriptor(proto, 'value');
-    if (desc?.set) desc.set.call(el, value);
+    var proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    var desc = Object.getOwnPropertyDescriptor(proto, 'value');
+    if (desc && desc.set) desc.set.call(el, value);
     else el.value = value;
 
     el.dispatchEvent(new InputEvent('input', {
@@ -511,9 +348,9 @@ fullscreen       : ${DBG.fullscreen}`;
 
   function findSendBtn() {
     return Array.from(document.querySelectorAll('button.bl-button.bl-button--primary.bl-button--small'))
-      .find(b => b.querySelector('span.txt')?.textContent?.trim() === '发送')
+      .find(function (b) { return (b.querySelector('span.txt') || {}).textContent === '发送'; })
       || Array.from(document.querySelectorAll('button'))
-      .find(b => b.querySelector('span.txt')?.textContent?.trim() === '发送')
+      .find(function (b) { return (b.querySelector('span.txt') || {}).textContent === '发送'; })
       || null;
   }
 
@@ -523,24 +360,24 @@ fullscreen       : ${DBG.fullscreen}`;
   }
 
   function sendDanmaku(text) {
-    const now = Date.now();
+    var now = Date.now();
     if (!canSendByCooldown(now)) {
       setDbg('lastErr', 'cooldown');
       return false;
     }
 
-    const input = findInput();
+    var input = findInput();
     if (!input) {
       setDbg('lastErr', 'input_not_found');
       return false;
     }
 
-    const finalText = CONFIG.appendPlusOne ? `${text} +1` : text;
+    var finalText = CONFIG.appendPlusOne ? text + ' +1' : text;
     input.focus();
     setNativeValue(input, finalText);
     state.lastSendAt = now;
 
-    const btn = findSendBtn();
+    var btn = findSendBtn();
     if (btn) {
       btn.click();
       setDbg('lastErr', '');
@@ -568,29 +405,64 @@ fullscreen       : ${DBG.fullscreen}`;
     plusBtn.style.cursor = '';
   }
 
+  // ==================== 弹幕节点事件绑定 ====================
+
+  function findDmContainer() {
+    for (var i = 0; i < DANMU_CONTAINER_SELECTORS.length; i++) {
+      var el = document.querySelector(DANMU_CONTAINER_SELECTORS[i]);
+      if (el) return el;
+    }
+    return null;
+  }
+
+  function isDanmuNode(node) {
+    if (node.nodeType !== Node.ELEMENT_NODE) return false;
+    if (!(node instanceof HTMLElement)) return false;
+    var cls = Array.from(node.classList);
+    return cls.indexOf('bili-danmaku-x-dm') !== -1 || cls.indexOf('danmaku-info-row') !== -1;
+  }
+
+  function attachDanmuEvents(el) {
+    if (el.dataset.dm1Bound === '1') return;
+    el.dataset.dm1Bound = '1';
+
+    el.addEventListener('mouseenter', function () {
+      var payload = getDmText(el);
+      if (!payload.text) return;
+
+      state.currentHit = { el: el, text: payload.text, type: payload.type };
+      freeze(el);
+      setDbg('hitText', payload.text);
+      setDbg('hitType', payload.type);
+      setDbg('currentConnected', true);
+      showBtn(el);
+    });
+
+    el.addEventListener('mouseleave', function () {
+      hideBtn();
+      clearCurrentHit();
+    });
+  }
+
   // ==================== 主渲染循环 ====================
 
-  let lastTickTime = 0;
+  var lastTickTime = 0;
 
   function scheduleFrame() {
     if (state.rafScheduled) return;
     if (state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) {
-      const now = performance.now();
+      var now = performance.now();
       if (now - lastTickTime < TIMING.LOW_FREQ_POLL_MS) return;
     }
     state.rafScheduled = true;
     requestAnimationFrame(tick);
   }
 
-  // 未开播检测：无播放器容器且无弹幕节点 → 降频轮询
   function handleNoPlayer() {
-    if (!findDmContainer() && state.dmNodeList.length === 0) {
+    if (!findDmContainer()) {
       state.noPlayerCount++;
       if (state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) {
-        setTimeout(() => {
-          state.dmListDirty = true;
-          scheduleFrame();
-        }, TIMING.LOW_FREQ_POLL_MS);
+        setTimeout(function () { scheduleFrame(); }, TIMING.LOW_FREQ_POLL_MS);
         return true;
       }
     } else {
@@ -599,75 +471,45 @@ fullscreen       : ${DBG.fullscreen}`;
     return false;
   }
 
-  function handleHitDetection() {
-    // 元素被 B站 JS 清理 → 转 ghost
-    if (state.currentHit?.el && !isElementAlive(state.currentHit.el)) {
-      markGhost();
-    }
-
-    const hit = findHit(state.mouse.x, state.mouse.y);
-
-    if (hit) {
-      if (!state.currentHit || state.currentHit.el !== hit.el) {
-        if (state.currentHit?.el && isElementAlive(state.currentHit.el)) unfreeze(state.currentHit.el);
-        state.currentHit = hit;
-        freeze(hit.el);
-        setDbg('hitText', hit.text);
-        setDbg('hitType', hit.type);
-        showBtn(hit);
-      }
-      // 每帧更新 lastRect：B站 JS 清理时 getBoundingClientRect 返回零值
-      if (state.currentHit?.el && isElementAlive(state.currentHit.el)) {
-        state.currentHit.lastRect = state.rectSnapshot.get(state.currentHit.el) || state.currentHit.el.getBoundingClientRect();
-      }
-      setDbg('currentConnected', isElementAlive(state.currentHit?.el));
-    } else {
-      refreshHoverState();
-    }
-  }
-
   function tick() {
     state.rafScheduled = false;
     lastTickTime = performance.now();
 
     if (handleNoPlayer()) return;
 
-    state.rectSnapshot = new WeakMap();
     mountOverlay();
     setDbg('frame', DBG.frame + 1);
 
-    if (state.mouseDirty) {
-      state.mouseDirty = false;
-      setDbg('mouse', `${state.mouse.x},${state.mouse.y}`);
-      handleHitDetection();
+    // 按钮跟随弹幕位置更新
+    if (state.currentHit && state.currentHit.el) {
+      setDbg('currentConnected', isElementAlive(state.currentHit.el));
+      placeBtn(state.currentHit.el);
     }
   }
 
   // ==================== 事件监听 ====================
 
-  document.addEventListener('mousemove', (e) => {
+  document.addEventListener('mousemove', function (e) {
     state.mouse.x = e.clientX;
     state.mouse.y = e.clientY;
-    state.mouseDirty = true;
-    scheduleFrame();
+    setDbg('mouse', state.mouse.x + ',' + state.mouse.y);
   }, { capture: true, passive: true });
 
-  plusBtn.addEventListener('click', (e) => {
+  plusBtn.addEventListener('click', function (e) {
     e.preventDefault();
     e.stopPropagation();
 
-    const now = Date.now();
+    var now = Date.now();
     if (state.clickLocked || now - state.lastClickAt < TIMING.CLICK_DEBOUNCE_MS) return;
     state.lastClickAt = now;
 
-    if (state.currentHit?.el && !isElementAlive(state.currentHit.el)) markGhost();
-    if (!state.currentHit?.text) return;
+    if (!state.currentHit || !state.currentHit.text) return;
 
     state.clickLocked = true;
     setBtnFeedbackSending();
     sendDanmaku(state.currentHit.text);
 
-    setTimeout(() => {
+    setTimeout(function () {
       resetBtnFeedback();
       state.clickLocked = false;
       hideBtn();
@@ -675,49 +517,44 @@ fullscreen       : ${DBG.fullscreen}`;
     }, TIMING.FEEDBACK_MS);
   });
 
-  document.addEventListener('fullscreenchange', () => {
+  document.addEventListener('fullscreenchange', function () {
     mountOverlay();
     bindMutationObserverTarget();
     setDbg('fullscreen', !!document.fullscreenElement);
-    state.dmListDirty = true;
-    state.mouseDirty = true;
     scheduleFrame();
   });
 
-  // MutationObserver：拦截 B站 JS 清理移除的冻结弹幕，检测 ghost
   function bindMutationObserverTarget() {
-    const nextTarget = findDmContainer() || document.documentElement;
+    var nextTarget = findDmContainer() || document.documentElement;
     if (state.dmObserverTarget === nextTarget) return;
     mo.disconnect();
     state.dmObserverTarget = nextTarget;
     mo.observe(state.dmObserverTarget, { childList: true, subtree: true });
   }
 
-  const mo = new MutationObserver((mutations) => {
-    state.dmListDirty = true;
+  var mo = new MutationObserver(function (mutations) {
+    for (var mi = 0; mi < mutations.length; mi++) {
+      var added = mutations[mi].addedNodes;
+      var removed = mutations[mi].removedNodes;
 
-    for (let mi = 0; mi < mutations.length; mi++) {
-      const removed = mutations[mi].removedNodes;
-      for (let ri = 0; ri < removed.length; ri++) {
-        const node = removed[ri];
-        if (node.nodeType === Node.ELEMENT_NODE && node.dataset && node.dataset.dm1Frozen === '1') {
-          dmSafeContainer.appendChild(node);
+      // 新弹幕节点 → 绑定事件
+      for (var ai = 0; ai < added.length; ai++) {
+        var node = added[ai];
+        if (isDanmuNode(node)) {
+          attachDanmuEvents(node);
+          setDbg('dmCount', DBG.dmCount + 1);
         }
       }
-    }
 
-    if (state.currentHit?.el && !isElementAlive(state.currentHit.el)) {
-      markGhost();
-      state.mouseDirty = true;
-    }
-
-    if (!state.moPending) {
-      state.moPending = true;
-      requestAnimationFrame(() => {
-        state.moPending = false;
-        state.mouseDirty = true;
-        scheduleFrame();
-      });
+      // 冻结弹幕被 B站 JS 清理 → 移入安全容器保持存活
+      for (var ri = 0; ri < removed.length; ri++) {
+        var rm = removed[ri];
+        if (rm.nodeType === Node.ELEMENT_NODE && rm.dataset && rm.dataset.dm1Frozen === '1') {
+          rm.style.pointerEvents = 'auto';
+          dmSafeContainer.appendChild(rm);
+          setDbg('currentConnected', true);
+        }
+      }
     }
   });
 
@@ -725,16 +562,16 @@ fullscreen       : ${DBG.fullscreen}`;
 
   function registerMenus() {
     try {
-      GM_registerMenuCommand('切换发送冷却', () => {
+      GM_registerMenuCommand('切换发送冷却', function () {
         CONFIG.enableSendCooldown = !CONFIG.enableSendCooldown;
         storageSet('enableSendCooldown', CONFIG.enableSendCooldown);
         setDbg('enableSendCooldown', CONFIG.enableSendCooldown);
         console.log('[DM+1] 发送冷却:', CONFIG.enableSendCooldown ? '开' : '关');
       });
 
-      CONFIG.cooldownMsOptions.forEach(ms => {
-        const label = ms === 0 ? '无间隔' : `${(ms / 1000).toFixed(1)}s`;
-        GM_registerMenuCommand(`发送间隔 → ${label}`, () => {
+      CONFIG.cooldownMsOptions.forEach(function (ms) {
+        var label = ms === 0 ? '无间隔' : (ms / 1000).toFixed(1) + 's';
+        GM_registerMenuCommand('发送间隔 → ' + label, function () {
           CONFIG.cooldownMs = ms;
           storageSet('cooldownMs', ms);
           setDbg('cooldownMs', ms);
@@ -742,16 +579,16 @@ fullscreen       : ${DBG.fullscreen}`;
         });
       });
 
-      GM_registerMenuCommand('切换按钮透明度', () => {
-        const opts = UI.OPACITY_OPTIONS;
-        const idx = opts.indexOf(CONFIG.btnOpacity);
+      GM_registerMenuCommand('切换按钮透明度', function () {
+        var opts = UI.OPACITY_OPTIONS;
+        var idx = opts.indexOf(CONFIG.btnOpacity);
         CONFIG.btnOpacity = opts[(idx + 1) % opts.length];
         storageSet('btnOpacity', CONFIG.btnOpacity);
         plusBtn.style.opacity = CONFIG.btnOpacity;
         console.log('[DM+1] 按钮透明度:', Math.round(CONFIG.btnOpacity * 100) + '%');
       });
 
-      GM_registerMenuCommand('切换调试面板', () => {
+      GM_registerMenuCommand('切换调试面板', function () {
         CONFIG.debug = !CONFIG.debug;
         storageSet('debug', CONFIG.debug);
         debugPanel.style.display = CONFIG.debug ? 'block' : 'none';
@@ -759,14 +596,21 @@ fullscreen       : ${DBG.fullscreen}`;
         console.log('[DM+1] 调试面板:', CONFIG.debug ? '开' : '关');
       });
 
-      GM_registerMenuCommand('重置所有设置', () => {
-        ['enableSendCooldown', 'cooldownMs', 'debug', 'btnOpacity'].forEach(k => {
-          try { GM_deleteValue?.(k); } catch (e) { /* ignore */ }
+      GM_registerMenuCommand('重置所有设置', function () {
+        ['enableSendCooldown', 'cooldownMs', 'debug', 'btnOpacity'].forEach(function (k) {
+          try { GM_deleteValue && GM_deleteValue(k); } catch (e) { /* ignore */ }
           try { localStorage.removeItem('dm1_' + k); } catch (e) { /* ignore */ }
         });
         location.reload();
       });
     } catch (e) { /* GM_registerMenuCommand not available in this context */ }
+  }
+
+  // ==================== 环境检测 ====================
+
+  if (window.self !== window.top && /\/activity\/|\/blackboard\//.test(location.href)) {
+    console.log('[DM+1] activity iframe detected, skipping init');
+    return;
   }
 
   // ==================== 初始化 ====================
@@ -779,8 +623,6 @@ fullscreen       : ${DBG.fullscreen}`;
   setDbg('enableSendCooldown', CONFIG.enableSendCooldown);
   renderDebug();
 
-  state.dmListDirty = true;
-  state.mouseDirty = true;
   scheduleFrame();
 
   console.log('[DM+1] v0.0.1 loaded');
