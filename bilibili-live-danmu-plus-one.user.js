@@ -417,18 +417,16 @@ fullscreen       : ${DBG.fullscreen}`;
     return null;
   }
 
-  // 用 [role="comment"] 识别弹幕 — B站弹幕的标准 HTML 属性，跨场景最稳定
   function isDanmuNode(node) {
     if (node.nodeType !== Node.ELEMENT_NODE) return false;
     if (!(node instanceof HTMLElement)) return false;
-    return node.getAttribute('role') === 'comment';
+    var cls = node.classList;
+    return cls.contains('bili-danmaku-x-dm') || cls.contains('danmaku-info-row');
   }
-
-  var DM_QUERY = '[role="comment"]';
 
   function scanAndBind(root) {
     if (!root.querySelectorAll) return;
-    var nodes = root.querySelectorAll(DM_QUERY);
+    var nodes = root.querySelectorAll('.bili-danmaku-x-dm, .danmaku-info-row');
     for (var i = 0; i < nodes.length; i++) {
       attachDanmuEvents(nodes[i]);
     }
@@ -558,31 +556,13 @@ fullscreen       : ${DBG.fullscreen}`;
 
   document.addEventListener('fullscreenchange', function () {
     mountOverlay();
+    bindMutationObserverTarget();
     setDbg('fullscreen', !!document.fullscreenElement);
-    // 全屏后 B站可能异步重建 DOM，延迟重试绑定 MO
-    tryBindContainer(0);
     scheduleFrame();
   });
 
-  // 渐进式重试：全屏后容器可能延迟出现，最晚 1s 后挂到 documentElement
-  function tryBindContainer(delay) {
-    setTimeout(function () {
-      var c = findDmContainer();
-      if (c) {
-        bindMutationObserverTarget();
-        scanAndBind(c);
-      } else if (delay < 800) {
-        tryBindContainer(delay + 250);
-      } else {
-        bindMutationObserverTarget(); // fallback: document.documentElement
-      }
-    }, delay);
-  }
-
   function bindMutationObserverTarget() {
-    var nextTarget = findDmContainer()
-      || document.querySelector(PLAYER_SELECTORS)
-      || document.body;
+    var nextTarget = findDmContainer() || document.documentElement;
     if (state.dmObserverTarget === nextTarget) return;
     mo.disconnect();
     state.dmObserverTarget = nextTarget;
@@ -678,20 +658,20 @@ fullscreen       : ${DBG.fullscreen}`;
 
   registerMenus();
   mountOverlay();
+  bindMutationObserverTarget();
   setDbg('fullscreen', !!document.fullscreenElement);
   setDbg('cooldownMs', CONFIG.cooldownMs);
   setDbg('enableSendCooldown', CONFIG.enableSendCooldown);
   renderDebug();
 
-  // 渐进式绑定 MO + 初始扫描
-  tryBindContainer(0);
+  // 初始扫描已存在的弹幕节点
+  var container = findDmContainer();
+  if (container) scanAndBind(container);
 
-  // 定期兜底扫描玩家容器范围，捕获 MO 遗漏节点
+  // 定期兜底扫描，捕获 MutationObserver 遗漏的节点
   setInterval(function () {
-    var scope = findDmContainer()
-      || document.querySelector(PLAYER_SELECTORS)
-      || document.body;
-    scanAndBind(scope);
+    var c = findDmContainer();
+    if (c) scanAndBind(c);
   }, 2000);
 
   scheduleFrame();
