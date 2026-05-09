@@ -426,6 +426,10 @@ fullscreen       : ${DBG.fullscreen}`;
     if (el.dataset.dm1Bound === '1') return;
     el.dataset.dm1Bound = '1';
 
+    // B站弹幕容器有 pointer-events:none 使点击穿透到视频，
+    // 必须给弹幕节点恢复 pointer-events 才能触发 mouseenter/mouseleave
+    el.style.pointerEvents = 'auto';
+
     el.addEventListener('mouseenter', function () {
       var payload = getDmText(el);
       if (!payload.text) return;
