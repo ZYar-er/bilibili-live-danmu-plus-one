@@ -1,0 +1,11 @@
+{
+  "name": "bilibili-live-danmu-plus-one",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0"
+  }
+}
