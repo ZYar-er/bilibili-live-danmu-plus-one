@@ -35,6 +35,8 @@
     GHOST_CLEANUP_MS: 3e4,
     NO_PLAYER_THRESHOLD: 30,
     LOW_FREQ_POLL_MS: 2e3,
+    DM_WAIT_POLL_MS: 300,
+    DM_SCAN_POLL_MS: 500,
     LEAVE_DELAY_MS: 50
   };
   var UI = {
@@ -48,8 +50,11 @@
   };
   var EMOJI_FALLBACK = "[\u8868\u60C5]";
   var DM_CONTAINER_SELECTORS = [
+    "#live-player .web-player-danmaku .danmaku-item-container",
+    "#live-player .danmaku-item-container",
     ".web-player-danmaku .danmaku-item-container",
     ".danmaku-item-container",
+    "#live-player .web-player-danmaku",
     ".web-player-danmaku",
     '.bili-danmaku-x-dm[role="comment"]',
     ".bili-danmaku-x-dm",
@@ -579,17 +584,31 @@
       scheduleFrame();
     });
     var lastTickTime = 0;
+    var containerWaitTimer = 0;
     function scheduleFrame() {
       if (state.rafScheduled)
         return;
       state.rafScheduled = true;
       requestAnimationFrame(tick);
     }
+    function startContainerWaiter() {
+      if (containerWaitTimer)
+        return;
+      containerWaitTimer = setInterval(function() {
+        var container2 = findDmContainer();
+        if (container2) {
+          scanAndBind(container2);
+          clearInterval(containerWaitTimer);
+          containerWaitTimer = 0;
+        }
+      }, TIMING.DM_WAIT_POLL_MS);
+    }
     function tick() {
       state.rafScheduled = false;
       lastTickTime = performance.now();
       var dmContainer = findDmContainer();
       if (!dmContainer && state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) {
+        startContainerWaiter();
         setTimeout(function() {
           scheduleFrame();
         }, TIMING.LOW_FREQ_POLL_MS);
@@ -597,6 +616,7 @@
       }
       if (!dmContainer) {
         state.noPlayerCount++;
+        startContainerWaiter();
       } else {
         state.noPlayerCount = 0;
       }
@@ -667,10 +687,11 @@
     registerMenus();
     var container = findDmContainer() || getScope().querySelector(PLAYER_SELECTORS) || getScope();
     scanAndBind(container);
+    startContainerWaiter();
     setInterval(function() {
       var scope = findDmContainer() || getScope().querySelector(PLAYER_SELECTORS) || getScope();
       scanAndBind(scope);
-    }, 2e3);
+    }, TIMING.DM_SCAN_POLL_MS);
     scheduleFrame();
     console.log("[DM+1] v0.0.1 loaded");
   })();

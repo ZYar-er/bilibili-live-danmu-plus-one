@@ -5,6 +5,8 @@ export const TIMING = {
   GHOST_CLEANUP_MS: 30000,
   NO_PLAYER_THRESHOLD: 30,
   LOW_FREQ_POLL_MS: 2000,
+  DM_WAIT_POLL_MS: 300,
+  DM_SCAN_POLL_MS: 500,
   LEAVE_DELAY_MS: 50,
 };
 
@@ -21,8 +23,11 @@ export const UI = {
 export const EMOJI_FALLBACK = '[表情]';
 
 export const DM_CONTAINER_SELECTORS = [
+  '#live-player .web-player-danmaku .danmaku-item-container',
+  '#live-player .danmaku-item-container',
   '.web-player-danmaku .danmaku-item-container',
   '.danmaku-item-container',
+  '#live-player .web-player-danmaku',
   '.web-player-danmaku',
   '.bili-danmaku-x-dm[role="comment"]',
   '.bili-danmaku-x-dm',

@@ -54,11 +54,24 @@ import { sendDanmaku } from './sender/input-sender.js';
 
   // ========= 主循环 =========
   var lastTickTime = 0;
+  var containerWaitTimer = 0;
 
   function scheduleFrame() {
     if (state.rafScheduled) return;
     state.rafScheduled = true;
     requestAnimationFrame(tick);
+  }
+
+  function startContainerWaiter() {
+    if (containerWaitTimer) return;
+    containerWaitTimer = setInterval(function () {
+      var container = findDmContainer();
+      if (container) {
+        scanAndBind(container);
+        clearInterval(containerWaitTimer);
+        containerWaitTimer = 0;
+      }
+    }, TIMING.DM_WAIT_POLL_MS);
   }
 
   function tick() {
@@ -68,12 +81,14 @@ import { sendDanmaku } from './sender/input-sender.js';
 
     // 未开播检测（降频）
     if (!dmContainer && state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) {
+      startContainerWaiter();
       setTimeout(function () { scheduleFrame(); }, TIMING.LOW_FREQ_POLL_MS);
       return;
     }
 
     if (!dmContainer) {
       state.noPlayerCount++;
+      startContainerWaiter();
     } else {
       state.noPlayerCount = 0;
     }
@@ -148,12 +163,13 @@ import { sendDanmaku } from './sender/input-sender.js';
   // 初始扫描
   var container = findDmContainer() || getScope().querySelector(PLAYER_SELECTORS) || getScope();
   scanAndBind(container);
+  startContainerWaiter();
 
   // 定期兜底扫描
   setInterval(function () {
     var scope = findDmContainer() || getScope().querySelector(PLAYER_SELECTORS) || getScope();
     scanAndBind(scope);
-  }, 2000);
+  }, TIMING.DM_SCAN_POLL_MS);
 
   scheduleFrame();
   console.log('[DM+1] v0.0.1 loaded');
