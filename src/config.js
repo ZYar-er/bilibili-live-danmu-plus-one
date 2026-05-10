@@ -20,8 +20,30 @@ export const UI = {
 
 export const EMOJI_FALLBACK = '[表情]';
 
-export const DM_CONTAINER_SEL = '.bili-danmaku-x-dm';
-export const DM_SCAN_SEL = '.bili-danmaku-x-dm, .bili-danmaku-x-roll';
+export const DM_CONTAINER_SELECTORS = [
+  '.web-player-danmaku .danmaku-item-container',
+  '.danmaku-item-container',
+  '.web-player-danmaku',
+  '.bili-danmaku-x-dm[role="comment"]',
+  '.bili-danmaku-x-dm',
+  '.live-player-dm-wrap',
+  '.bilibili-live-player-video-danmaku',
+  '[class*="danmaku"][class*="container"]',
+  '[class*="danmaku"][class*="wrap"]',
+  '[class*="danmu"][class*="wrap"]',
+];
+
+export const DM_SCAN_SEL = [
+  '.bili-danmaku-x-dm[role="comment"]',
+  '.bili-danmaku-x-dm',
+  '.bili-danmaku-x-roll',
+  '.bili-danmaku-x-show',
+  '[class*="danmaku"][class*="roll"]',
+  '[class*="danmu"][class*="roll"]',
+  '[class*="danmaku"][class*="item"]',
+  '[class*="danmu"][class*="item"]',
+  '[role="comment"][class*="danmaku"]',
+].join(', ');
 export const PLAYER_SELECTORS = '.bilibili-live-player-video, #live-player, .live-player-container';
 
 // 持久化

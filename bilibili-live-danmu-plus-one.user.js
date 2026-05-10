@@ -47,8 +47,29 @@
     OPACITY_OPTIONS: [0.3, 0.5, 0.7, 0.8, 0.95]
   };
   var EMOJI_FALLBACK = "[\u8868\u60C5]";
-  var DM_CONTAINER_SEL = ".bili-danmaku-x-dm";
-  var DM_SCAN_SEL = ".bili-danmaku-x-dm, .bili-danmaku-x-roll";
+  var DM_CONTAINER_SELECTORS = [
+    ".web-player-danmaku .danmaku-item-container",
+    ".danmaku-item-container",
+    ".web-player-danmaku",
+    '.bili-danmaku-x-dm[role="comment"]',
+    ".bili-danmaku-x-dm",
+    ".live-player-dm-wrap",
+    ".bilibili-live-player-video-danmaku",
+    '[class*="danmaku"][class*="container"]',
+    '[class*="danmaku"][class*="wrap"]',
+    '[class*="danmu"][class*="wrap"]'
+  ];
+  var DM_SCAN_SEL = [
+    '.bili-danmaku-x-dm[role="comment"]',
+    ".bili-danmaku-x-dm",
+    ".bili-danmaku-x-roll",
+    ".bili-danmaku-x-show",
+    '[class*="danmaku"][class*="roll"]',
+    '[class*="danmu"][class*="roll"]',
+    '[class*="danmaku"][class*="item"]',
+    '[class*="danmu"][class*="item"]',
+    '[role="comment"][class*="danmaku"]'
+  ].join(", ");
   var PLAYER_SELECTORS = ".bilibili-live-player-video, #live-player, .live-player-container";
   function storageGet(key, def) {
     try {
@@ -129,6 +150,9 @@
           parts.push({ type: "text", value: t });
       } else if (child.tagName === "IMG") {
         var name = child.dataset.name || child.getAttribute("alt") || "";
+        if (!name && child.classList.contains("bili-danmaku-x-dm-emoji")) {
+          name = "\u8868\u60C5";
+        }
         parts.push({ type: "emoji", value: name ? "[" + name + "]" : EMOJI_FALLBACK });
       } else if (child.tagName === "SPAN" && child.classList.contains("emoji")) {
         parts.push({ type: "emoji-sm", value: child.textContent });
@@ -154,11 +178,17 @@
   var _debugPanel;
   function initDebugPanel() {
     _debugPanel = document.createElement("div");
+    _debugPanel.dataset.dm1Debug = "1";
     _debugPanel.style.cssText = "position:fixed;left:10px;top:10px;z-index:" + UI.Z_INDEX + ";min-width:360px;max-width:52vw;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.72);color:#7CFFB2;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;white-space:pre-wrap;word-break:break-all;pointer-events:none;display:" + (CONFIG.debug ? "block" : "none");
+    ensureDebugPanelParent();
+    return _debugPanel;
+  }
+  function ensureDebugPanelParent() {
+    if (!_debugPanel)
+      return;
     var r = root();
     if (_debugPanel.parentNode !== r)
       r.appendChild(_debugPanel);
-    return _debugPanel;
   }
   var DBG = {
     frame: 0,
@@ -341,12 +371,33 @@
   }
 
   // src/core/observer.js
+  function firstMatch(scope, selectors) {
+    for (var i = 0; i < selectors.length; i++) {
+      var el = scope.querySelector(selectors[i]);
+      if (el)
+        return el;
+    }
+    return null;
+  }
   function isDanmuNode(node) {
     if (node.nodeType !== Node.ELEMENT_NODE)
       return false;
     if (!(node instanceof HTMLElement))
       return false;
-    return node.classList.contains("bili-danmaku-x-dm") || node.classList.contains("bili-danmaku-x-roll");
+    if (node.getAttribute("role") === "comment" && (node.classList.contains("bili-danmaku-x-dm") || node.classList.contains("bili-danmaku-x-roll") || node.classList.contains("bili-danmaku-x-show"))) {
+      return true;
+    }
+    if (node.classList.contains("bili-danmaku-x-dm") || node.classList.contains("bili-danmaku-x-roll")) {
+      return true;
+    }
+    var cls = (node.className || "").toLowerCase();
+    if ((cls.indexOf("danmaku") >= 0 || cls.indexOf("danmu") >= 0) && node.innerText && node.innerText.trim()) {
+      return true;
+    }
+    if (node.querySelector('img[data-name], img[alt], img.bili-danmaku-x-dm-emoji, span.emoji, [class*="emoji"]')) {
+      return true;
+    }
+    return false;
   }
   function attachEvents(el) {
     if (!(el instanceof HTMLElement))
@@ -388,13 +439,17 @@
     if (!root2.querySelectorAll)
       return;
     var nodes = root2.querySelectorAll(DM_SCAN_SEL);
+    var boundCount = 0;
     for (var i = 0; i < nodes.length; i++) {
+      if (!isDanmuNode(nodes[i]))
+        continue;
       attachEvents(nodes[i]);
+      boundCount++;
     }
-    setDbg("dmCount", 0);
+    setDbg("dmCount", boundCount);
   }
   function findDmContainer() {
-    return getScope().querySelector(DM_CONTAINER_SEL);
+    return firstMatch(getScope(), DM_CONTAINER_SELECTORS);
   }
   var _mo;
   function bindObserverTarget() {
@@ -402,7 +457,7 @@
       state.dmObserverTarget = null;
     }
     var scope = getScope();
-    var nextTarget = scope.querySelector(DM_CONTAINER_SEL) || scope.querySelector(".bilibili-live-player-video, #live-player") || scope;
+    var nextTarget = findDmContainer() || scope.querySelector(".bilibili-live-player-video, #live-player") || scope;
     if (state.dmObserverTarget === nextTarget)
       return;
     if (_mo)
@@ -518,6 +573,7 @@
     document.addEventListener("fullscreenchange", function() {
       mountOverlay();
       ensureSafeContainer();
+      ensureDebugPanelParent();
       state.dmObserverTarget = null;
       setDbg("fullscreen", !!document.fullscreenElement);
       scheduleFrame();
@@ -532,19 +588,21 @@
     function tick() {
       state.rafScheduled = false;
       lastTickTime = performance.now();
-      if (!getScope().querySelector(DM_CONTAINER_SEL) && state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) {
+      var dmContainer = findDmContainer();
+      if (!dmContainer && state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) {
         setTimeout(function() {
           scheduleFrame();
         }, TIMING.LOW_FREQ_POLL_MS);
         return;
       }
-      if (!getScope().querySelector(DM_CONTAINER_SEL)) {
+      if (!dmContainer) {
         state.noPlayerCount++;
       } else {
         state.noPlayerCount = 0;
       }
       mountOverlay();
       ensureSafeContainer();
+      ensureDebugPanelParent();
       bindObserverTarget();
       setDbg("frame", 1);
       if (state.currentHit && state.currentHit.el) {

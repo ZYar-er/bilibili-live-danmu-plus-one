@@ -9,6 +9,9 @@ export function getDmText(el) {
       if (t) parts.push({ type: 'text', value: t });
     } else if (child.tagName === 'IMG') {
       var name = child.dataset.name || child.getAttribute('alt') || '';
+      if (!name && child.classList.contains('bili-danmaku-x-dm-emoji')) {
+        name = '表情';
+      }
       parts.push({ type: 'emoji', value: name ? '[' + name + ']' : EMOJI_FALLBACK });
     } else if (child.tagName === 'SPAN' && child.classList.contains('emoji')) {
       parts.push({ type: 'emoji-sm', value: child.textContent });

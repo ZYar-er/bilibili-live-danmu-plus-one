@@ -1,10 +1,10 @@
-import { TIMING, CONFIG, UI, storageSet, DM_CONTAINER_SEL, DM_SCAN_SEL, PLAYER_SELECTORS } from './config.js';
+import { TIMING, CONFIG, UI, storageSet, PLAYER_SELECTORS } from './config.js';
 import { state } from './state.js';
 import { root, isElementAlive } from './utils.js';
 import { isMainFrame, getScope } from './core/env-detector.js';
 import { scanAndBind, findDmContainer, bindObserverTarget } from './core/observer.js';
 import { createPlusBtn, showBtn, hideBtn, placeBtnTick, mountOverlay, setupButtonEvents, clearCurrentHit } from './ui/button.js';
-import { initDebugPanel, setDbg, renderDebug } from './ui/debug-panel.js';
+import { initDebugPanel, ensureDebugPanelParent, setDbg, renderDebug } from './ui/debug-panel.js';
 import { ensureSafeContainer } from './ui/safe-container.js';
 import { sendDanmaku } from './sender/input-sender.js';
 
@@ -46,6 +46,7 @@ import { sendDanmaku } from './sender/input-sender.js';
   document.addEventListener('fullscreenchange', function () {
     mountOverlay();
     ensureSafeContainer();
+    ensureDebugPanelParent();
     state.dmObserverTarget = null;
     setDbg('fullscreen', !!document.fullscreenElement);
     scheduleFrame();
@@ -63,14 +64,15 @@ import { sendDanmaku } from './sender/input-sender.js';
   function tick() {
     state.rafScheduled = false;
     lastTickTime = performance.now();
+    var dmContainer = findDmContainer();
 
     // 未开播检测（降频）
-    if (!getScope().querySelector(DM_CONTAINER_SEL) && state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) {
+    if (!dmContainer && state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) {
       setTimeout(function () { scheduleFrame(); }, TIMING.LOW_FREQ_POLL_MS);
       return;
     }
 
-    if (!getScope().querySelector(DM_CONTAINER_SEL)) {
+    if (!dmContainer) {
       state.noPlayerCount++;
     } else {
       state.noPlayerCount = 0;
@@ -78,6 +80,7 @@ import { sendDanmaku } from './sender/input-sender.js';
 
     mountOverlay();
     ensureSafeContainer();
+    ensureDebugPanelParent();
     bindObserverTarget();
     setDbg('frame', 1); // debug 计数简化
 
