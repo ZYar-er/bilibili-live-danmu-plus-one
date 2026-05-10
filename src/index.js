@@ -79,16 +79,13 @@ import { sendDanmaku } from './sender/input-sender.js';
     lastTickTime = performance.now();
     var dmContainer = findDmContainer();
 
-    // 未开播检测（降频）
-    if (!dmContainer && state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) {
-      startContainerWaiter();
-      setTimeout(function () { scheduleFrame(); }, TIMING.LOW_FREQ_POLL_MS);
-      return;
-    }
-
     if (!dmContainer) {
       state.noPlayerCount++;
       startContainerWaiter();
+      if (state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) {
+        setTimeout(function () { scheduleFrame(); }, TIMING.LOW_FREQ_POLL_MS);
+        return;
+      }
     } else {
       state.noPlayerCount = 0;
     }
@@ -165,7 +162,7 @@ import { sendDanmaku } from './sender/input-sender.js';
   scanAndBind(container);
   startContainerWaiter();
 
-  // 定期兜底扫描
+  // 定期兜底扫描（高频，减少漏绑）
   setInterval(function () {
     var scope = findDmContainer() || getScope().querySelector(PLAYER_SELECTORS) || getScope();
     scanAndBind(scope);

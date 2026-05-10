@@ -6,7 +6,7 @@ export const TIMING = {
   NO_PLAYER_THRESHOLD: 30,
   LOW_FREQ_POLL_MS: 2000,
   DM_WAIT_POLL_MS: 300,
-  DM_SCAN_POLL_MS: 500,
+  DM_SCAN_POLL_MS: 300,
   LEAVE_DELAY_MS: 50,
 };
 
@@ -29,26 +29,10 @@ export const DM_CONTAINER_SELECTORS = [
   '.danmaku-item-container',
   '#live-player .web-player-danmaku',
   '.web-player-danmaku',
-  '.bili-danmaku-x-dm[role="comment"]',
-  '.bili-danmaku-x-dm',
   '.live-player-dm-wrap',
-  '.bilibili-live-player-video-danmaku',
-  '[class*="danmaku"][class*="container"]',
-  '[class*="danmaku"][class*="wrap"]',
-  '[class*="danmu"][class*="wrap"]',
 ];
 
-export const DM_SCAN_SEL = [
-  '.bili-danmaku-x-dm[role="comment"]',
-  '.bili-danmaku-x-dm',
-  '.bili-danmaku-x-roll',
-  '.bili-danmaku-x-show',
-  '[class*="danmaku"][class*="roll"]',
-  '[class*="danmu"][class*="roll"]',
-  '[class*="danmaku"][class*="item"]',
-  '[class*="danmu"][class*="item"]',
-  '[role="comment"][class*="danmaku"]',
-].join(', ');
+export const DM_NODE_SELECTOR = '.bili-danmaku-x-dm[role="comment"]';
 export const PLAYER_SELECTORS = '.bilibili-live-player-video, #live-player, .live-player-container';
 
 // 持久化

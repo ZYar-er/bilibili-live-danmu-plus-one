@@ -36,7 +36,7 @@
     NO_PLAYER_THRESHOLD: 30,
     LOW_FREQ_POLL_MS: 2e3,
     DM_WAIT_POLL_MS: 300,
-    DM_SCAN_POLL_MS: 500,
+    DM_SCAN_POLL_MS: 300,
     LEAVE_DELAY_MS: 50
   };
   var UI = {
@@ -56,25 +56,9 @@
     ".danmaku-item-container",
     "#live-player .web-player-danmaku",
     ".web-player-danmaku",
-    '.bili-danmaku-x-dm[role="comment"]',
-    ".bili-danmaku-x-dm",
-    ".live-player-dm-wrap",
-    ".bilibili-live-player-video-danmaku",
-    '[class*="danmaku"][class*="container"]',
-    '[class*="danmaku"][class*="wrap"]',
-    '[class*="danmu"][class*="wrap"]'
+    ".live-player-dm-wrap"
   ];
-  var DM_SCAN_SEL = [
-    '.bili-danmaku-x-dm[role="comment"]',
-    ".bili-danmaku-x-dm",
-    ".bili-danmaku-x-roll",
-    ".bili-danmaku-x-show",
-    '[class*="danmaku"][class*="roll"]',
-    '[class*="danmu"][class*="roll"]',
-    '[class*="danmaku"][class*="item"]',
-    '[class*="danmu"][class*="item"]',
-    '[role="comment"][class*="danmaku"]'
-  ].join(", ");
+  var DM_NODE_SELECTOR = '.bili-danmaku-x-dm[role="comment"]';
   var PLAYER_SELECTORS = ".bilibili-live-player-video, #live-player, .live-player-container";
   function storageGet(key, def) {
     try {
@@ -389,19 +373,8 @@
       return false;
     if (!(node instanceof HTMLElement))
       return false;
-    if (node.getAttribute("role") === "comment" && (node.classList.contains("bili-danmaku-x-dm") || node.classList.contains("bili-danmaku-x-roll") || node.classList.contains("bili-danmaku-x-show"))) {
+    if (node.matches && node.matches(DM_NODE_SELECTOR))
       return true;
-    }
-    if (node.classList.contains("bili-danmaku-x-dm") || node.classList.contains("bili-danmaku-x-roll")) {
-      return true;
-    }
-    var cls = (node.className || "").toLowerCase();
-    if ((cls.indexOf("danmaku") >= 0 || cls.indexOf("danmu") >= 0) && node.innerText && node.innerText.trim()) {
-      return true;
-    }
-    if (node.querySelector('img[data-name], img[alt], img.bili-danmaku-x-dm-emoji, span.emoji, [class*="emoji"]')) {
-      return true;
-    }
     return false;
   }
   function attachEvents(el) {
@@ -441,13 +414,11 @@
     });
   }
   function scanAndBind(root2) {
-    if (!root2.querySelectorAll)
+    if (!root2 || !root2.querySelectorAll)
       return;
-    var nodes = root2.querySelectorAll(DM_SCAN_SEL);
+    var nodes = root2.querySelectorAll(DM_NODE_SELECTOR);
     var boundCount = 0;
     for (var i = 0; i < nodes.length; i++) {
-      if (!isDanmuNode(nodes[i]))
-        continue;
       attachEvents(nodes[i]);
       boundCount++;
     }
@@ -607,16 +578,15 @@
       state.rafScheduled = false;
       lastTickTime = performance.now();
       var dmContainer = findDmContainer();
-      if (!dmContainer && state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) {
-        startContainerWaiter();
-        setTimeout(function() {
-          scheduleFrame();
-        }, TIMING.LOW_FREQ_POLL_MS);
-        return;
-      }
       if (!dmContainer) {
         state.noPlayerCount++;
         startContainerWaiter();
+        if (state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) {
+          setTimeout(function() {
+            scheduleFrame();
+          }, TIMING.LOW_FREQ_POLL_MS);
+          return;
+        }
       } else {
         state.noPlayerCount = 0;
       }
