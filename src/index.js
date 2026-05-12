@@ -125,7 +125,7 @@ import { sendDanmaku } from './sender/input-sender.js';
     state.rafScheduled = false;
     lastTickTime = performance.now();
     var dmContainer = findDmContainer();
-    setDbg('mouse', state.mouse.x + ',' + state.mouse.y);
+    if (CONFIG.debug) setDbg('mouse', state.mouse.x + ',' + state.mouse.y);
 
     if (!dmContainer) {
       state.noPlayerCount++;

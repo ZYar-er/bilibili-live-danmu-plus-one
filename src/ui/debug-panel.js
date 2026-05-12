@@ -46,6 +46,7 @@ var DBG = {
 };
 
 export function setDbg(k, v) {
+  if (DBG[k] === v) return;
   DBG[k] = v;
   renderDebug();
 }
