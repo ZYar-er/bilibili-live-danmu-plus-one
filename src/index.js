@@ -51,6 +51,7 @@ import { sendDanmaku } from './sender/input-sender.js';
   document.addEventListener('mousemove', function (e) {
     state.mouse.x = e.clientX;
     state.mouse.y = e.clientY;
+    mouseDirty = true;
     scheduleFrame();
   }, { capture: true, passive: true });
 
@@ -68,6 +69,7 @@ import { sendDanmaku } from './sender/input-sender.js';
   var lastTickTime = 0;
   var frameCount = 0;
   var containerWaitTimer = 0;
+  var mouseDirty = false;
 
   function scheduleFrame() {
     if (state.rafScheduled) return;
@@ -138,41 +140,48 @@ import { sendDanmaku } from './sender/input-sender.js';
       clearCurrentHit();
     }
 
-    var hit = hitTest(state.mouse.x, state.mouse.y, dmContainer);
-    if (!hit) {
-      handleNoHit();
-    } else {
-      if (state.leaveTimer) { clearTimeout(state.leaveTimer); state.leaveTimer = 0; }
-      var payload = resolvePayload(hit.el);
-      if (!payload.text) {
+    // 鼠标移动时才跑 hitTest，静止时跳过（保留按钮跟随即可）
+    if (mouseDirty) {
+      mouseDirty = false;
+      var hit = hitTest(state.mouse.x, state.mouse.y, dmContainer);
+      if (!hit) {
         handleNoHit();
       } else {
-        if (!state.currentHit || state.currentHit.el !== hit.el) {
-          if (state.currentHit) { hideBtn(); clearCurrentHit(); }
-          state.currentHit = { el: hit.el, text: payload.text, type: payload.type };
-          freeze(hit.el);
-          state.frozenRect = hit.rect;
-          showBtn(hit.el, state.frozenRect);
+        if (state.leaveTimer) { clearTimeout(state.leaveTimer); state.leaveTimer = 0; }
+        var payload = resolvePayload(hit.el);
+        if (!payload.text) {
+          handleNoHit();
         } else {
-          state.currentHit.text = payload.text;
-          state.currentHit.type = payload.type;
+          if (!state.currentHit || state.currentHit.el !== hit.el) {
+            if (state.currentHit) { hideBtn(); clearCurrentHit(); }
+            state.currentHit = { el: hit.el, text: payload.text, type: payload.type };
+            freeze(hit.el);
+            state.frozenRect = hit.rect;
+            showBtn(hit.el, state.frozenRect);
+          } else {
+            state.currentHit.text = payload.text;
+            state.currentHit.type = payload.type;
+          }
+          setDbg('hitText', payload.text);
+          setDbg('hitType', payload.type);
+          setDbg('hitSource', hit.source || '');
+          setDbg('hitSelector', hit.selector || '');
+          setDbg('hitRect', hit.rectText || '');
+          setDbg('currentConnected', true);
         }
-        setDbg('hitText', payload.text);
-        setDbg('hitType', payload.type);
-        setDbg('hitSource', hit.source || '');
-        setDbg('hitSelector', hit.selector || '');
-        setDbg('hitRect', hit.rectText || '');
-        setDbg('currentConnected', true);
       }
     }
 
-    // 按钮跟随
+    // 按钮跟随（鼠标静止时 rect 不变，仍需调用以处理弹幕滚动）
     if (state.currentHit && state.currentHit.el) {
       setDbg('currentConnected', isElementAlive(state.currentHit.el));
       placeBtnTick(state.currentHit.el, state.frozenRect);
     }
 
-    scheduleFrame();
+    // 鼠标移动或有活跃命中时继续循环，否则停止等待事件唤醒
+    if (mouseDirty || state.currentHit) {
+      scheduleFrame();
+    }
   }
 
   // ========= Tampermonkey 菜单 =========

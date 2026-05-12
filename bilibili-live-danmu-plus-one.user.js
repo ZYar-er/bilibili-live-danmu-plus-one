@@ -709,6 +709,7 @@
     document.addEventListener("mousemove", function(e) {
       state.mouse.x = e.clientX;
       state.mouse.y = e.clientY;
+      mouseDirty = true;
       scheduleFrame();
     }, { capture: true, passive: true });
     document.addEventListener("fullscreenchange", function() {
@@ -722,6 +723,7 @@
     var lastTickTime = 0;
     var frameCount = 0;
     var containerWaitTimer = 0;
+    var mouseDirty = false;
     function scheduleFrame() {
       if (state.rafScheduled)
         return;
@@ -791,44 +793,49 @@
         hideBtn();
         clearCurrentHit();
       }
-      var hit = hitTest(state.mouse.x, state.mouse.y, dmContainer);
-      if (!hit) {
-        handleNoHit();
-      } else {
-        if (state.leaveTimer) {
-          clearTimeout(state.leaveTimer);
-          state.leaveTimer = 0;
-        }
-        var payload = resolvePayload(hit.el);
-        if (!payload.text) {
+      if (mouseDirty) {
+        mouseDirty = false;
+        var hit = hitTest(state.mouse.x, state.mouse.y, dmContainer);
+        if (!hit) {
           handleNoHit();
         } else {
-          if (!state.currentHit || state.currentHit.el !== hit.el) {
-            if (state.currentHit) {
-              hideBtn();
-              clearCurrentHit();
-            }
-            state.currentHit = { el: hit.el, text: payload.text, type: payload.type };
-            freeze(hit.el);
-            state.frozenRect = hit.rect;
-            showBtn(hit.el, state.frozenRect);
-          } else {
-            state.currentHit.text = payload.text;
-            state.currentHit.type = payload.type;
+          if (state.leaveTimer) {
+            clearTimeout(state.leaveTimer);
+            state.leaveTimer = 0;
           }
-          setDbg("hitText", payload.text);
-          setDbg("hitType", payload.type);
-          setDbg("hitSource", hit.source || "");
-          setDbg("hitSelector", hit.selector || "");
-          setDbg("hitRect", hit.rectText || "");
-          setDbg("currentConnected", true);
+          var payload = resolvePayload(hit.el);
+          if (!payload.text) {
+            handleNoHit();
+          } else {
+            if (!state.currentHit || state.currentHit.el !== hit.el) {
+              if (state.currentHit) {
+                hideBtn();
+                clearCurrentHit();
+              }
+              state.currentHit = { el: hit.el, text: payload.text, type: payload.type };
+              freeze(hit.el);
+              state.frozenRect = hit.rect;
+              showBtn(hit.el, state.frozenRect);
+            } else {
+              state.currentHit.text = payload.text;
+              state.currentHit.type = payload.type;
+            }
+            setDbg("hitText", payload.text);
+            setDbg("hitType", payload.type);
+            setDbg("hitSource", hit.source || "");
+            setDbg("hitSelector", hit.selector || "");
+            setDbg("hitRect", hit.rectText || "");
+            setDbg("currentConnected", true);
+          }
         }
       }
       if (state.currentHit && state.currentHit.el) {
         setDbg("currentConnected", isElementAlive(state.currentHit.el));
         placeBtnTick(state.currentHit.el, state.frozenRect);
       }
-      scheduleFrame();
+      if (mouseDirty || state.currentHit) {
+        scheduleFrame();
+      }
     }
     function registerMenus() {
       try {
