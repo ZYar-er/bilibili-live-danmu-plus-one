@@ -14,18 +14,18 @@ src/
     observer.js       # MutationObserver：监听弹幕注入/移除，事件绑定
     hit-test.js       # 鼠标命中检测（elementsFromPoint + rect fallback）
     danmu-parser.js   # 弹幕内容提取（文字/表情IMG/span.emoji）
-    env-detector.js   # 环境检测：全屏scope
+    env-detector.js   # 环境检测：全屏scope、活动页外壳（isActivityShell）
   ui/
-    button.js         # +1 按钮：创建、定位（getBoundingClientRect）、显示/隐藏、freeze/unfreeze
+    button.js         # +1 按钮：创建、定位（跟随鼠标X，clamp到弹幕矩形）、显示/隐藏、freeze/unfreeze
     debug-panel.js    # 固定定位调试面板，全屏时迁移到 fullscreenElement
     safe-container.js # 冻结弹幕安全容器（position:fixed;pointer-events:none;z-index高）
   sender/
-    input-sender.js   # 发送：查找输入框、查找发送按钮、冷却管理、setNativeValue
+    input-sender.js   # 发送：查找输入框（.chat-input）、查找发送按钮、冷却管理、setNativeValue
   config.js           # 常量（TIMING/UI/DM_SELECTORS）+ 持久化（GM_getValue→localStorage）
   state.js            # 全局状态：{currentHit,frozenRect,lastSendAt,lastClickAt,clickLocked,mouse,rafScheduled,...}
   utils.js            # 工具：root(),isElementAlive(),clamp(),pointInRect()
-  index.js            # 入口：组装模块、主循环、Tampermonkey菜单
-build.js              # esbuild 打包：注入==UserScript==头，输出IIFE格式
+  index.js            # 入口：组装模块、主循环（按需启停）、Tampermonkey菜单
+build.js              # esbuild 打包：注入==UserScript==头（含@match blanc*），输出IIFE格式
 bilibili-live-danmu-plus-one.user.js  # 构建产物
 ```
 
@@ -34,14 +34,17 @@ bilibili-live-danmu-plus-one.user.js  # 构建产物
 B站弹幕DOM特征：
 - 容器：`.danmaku-item-container`（会被B站不断销毁重建）
 - 弹幕节点：`div.bili-danmaku-x-dm[role="comment"]`
-- 动画：CSS 自定义属性驱动，容器层 `pointer-events:none`
+- 动画：CSS 自定义属性驱动（`--translateX`、`--duration`、`--top`），容器层 `pointer-events:none`
+- 节点扁平结构：文本直接在 div 内，无 data-* 属性，状态全编码在 CSS 自定义属性中
 
 当前实现：
-1. `mousemove` + `elementsFromPoint` 作为命中主路径
-2. MutationObserver 用于新增节点解析缓存与冻结节点救援
-3. 300ms 扫描兜底补缓存（仅补未缓存）
-4. 命中后 freeze，使用冻结时 rect 定位按钮
-5. 活动页外壳跳过初始化，iframe 内正常初始化
+1. `mousemove` 设置 `mouseDirty` 标记 + 唤醒主循环
+2. `tick()` 内仅在 `mouseDirty=true` 时执行 `hitTest(elementsFromPoint)`，完成后置 false
+3. MutationObserver 用于新增节点解析缓存与冻结节点救援
+4. 300ms 扫描兜底补缓存（仅补未缓存）
+5. 命中后 freeze，按钮跟随鼠标 X（clamp 到弹幕矩形内）
+6. 鼠标静止且无命中时循环停止，等待下次 mousemove 唤醒
+7. 活动页外壳（`isActivityShell()`）跳过初始化，iframe（`/blanc/*`）内正常初始化
 
 ## 关键技术细节
 
@@ -53,11 +56,15 @@ B站弹幕DOM特征：
 - MutationObserver removedNodes回调中检测`el.dataset.dm1Frozen==='1'`
 - 移到dmSafeContainer（position:fixed;inset:0;overflow:visible;pointer-events:none）
 - 保持pointer-events:auto使弹幕仍可交互
-- 鼠标离开后unfreeze→animationend→remove
+- 鼠标离开后unfreeze→`shouldRemoveGhostNow()`检查：
+  - 动画已结束（`animationName==='none'` 或 `duration===0`）→ 立即 remove
+  - 动画未结束 → `animationend` 监听自清理 + 30s 超时兜底
 
-补充：若 `animationend` 不会再触发（动画已结束或 duration 为 0），应在 unfreeze 后立即检查并直接 remove，避免 30s 兜底过长。
-
-### 按钮防闪烁
+### 按钮定位与防闪烁
+- 按钮 `position:fixed`，X 跟随 `state.mouse.x`，clamp 到弹幕矩形 `[r.left+半宽, r.right-半宽]`
+- 弹幕太窄放不下按钮时回退到弹幕中心
+- Y 始终为弹幕矩形垂直中心
+- viewport 边距 clamp 防止按钮溢出屏幕
 - 弹幕mouseleave→50ms setTimeout延迟隐藏
 - 按钮mouseenter→clearTimeout取消隐藏
 - 按钮mouseleave→50ms延迟隐藏（鼠标可能回弹幕）
@@ -78,11 +85,25 @@ B站弹幕DOM特征：
 - DM_CONTAINER_SELECTORS = 优先级链：`#live-player .web-player-danmaku .danmaku-item-container` → `.danmaku-item-container` → `.web-player-danmaku` → `.live-player-dm-wrap`
 - 选择器链通过`firstMatch(scope,selectors)`遍历，返回首个存在的元素
 
+### 活动页支持
+
+活动页（Eva 框架）结构：
+- 顶层 `<html lang="zh-Hans" data-match-theme="dark">`，无弹幕 DOM
+- 直播播放器在 `<iframe src="//live.bilibili.com/blanc/{roomId}?liteVersion=true">` 内
+- iframe 内部结构与正常直播间一致（同一 webpack `live-room` 打包）
+- Eva 框架：`window.__BILIACT_ENV__`、`EraLiveNonRevenuePlayer` 组件管理多房间标签页
+
+适配方案：
+- `isActivityShell()` 检测顶层活动页 → 跳过初始化（顶层无弹幕）
+- `@match *://live.bilibili.com/blanc*` → 脚本注入 iframe 内部正常运行
+- iframe 内弹幕 DOM 结构、选择器、CSS 完全一致，无需额外适配
+
 ### 实测结论（来自 dev/inspector）
 
 - 活动页外层是活动页 `<html lang="zh-Hans" ...>`，直播间在 iframe（`/blanc/{roomId}`）内，iframe 内是正常页面 `<html lab-style="dark">`
-- 弹幕节点稳定特征：`div.bili-danmaku-x-dm[role="comment"]`
+- 弹幕节点稳定特征：`div.bili-danmaku-x-dm[role="comment"]`（ARIA `role="comment"` + `aria-live="polite"`）
 - 常见修饰类：`.bili-danmaku-x-roll`、`.bili-danmaku-x-show`
+- 弹幕类型：roll（滚动）、reverse（反向）、center（居中）、bidirection-reverse
 - 表情节点主要为 `IMG.bili-danmaku-x-dm-emoji`（未见 `span.emoji`）
 - 部分节点在动画未开始时 `rect` 为 0，应在 freeze 后再取 rect 定位按钮
 
@@ -91,13 +112,24 @@ B站弹幕DOM特征：
 
 ### 数据流（简化）
 ```
-mousemove -> hitTest(elementsFromPoint)
-  -> resolveDanmuNode
-  -> getParsedText (WeakMap cache, or parse on demand)
+mousemove -> mouseDirty=true + scheduleFrame()
+  -> tick()
+    -> mouseDirty? hitTest(elementsFromPoint)
+      -> resolveDanmuNode
+      -> resolvePayload (WeakMap cache, or parse on demand)
+      -> freeze + showBtn
+    -> placeBtnTick (跟随鼠标X)
 
 MutationObserver
   -> addedNodes -> parse + cache
+  -> removedNodes + frozen? -> rescue (移入安全容器)
 ```
+
+### 主循环启停策略
+- `mousemove` 唤醒循环（`scheduleFrame()`）
+- `tick()` 末尾仅在 `mouseDirty || state.currentHit` 时 reschedule
+- 无命中 + 鼠标静止 → 循环停止，零 CPU 占用
+- 有活跃命中 → 循环保持，处理弹幕滚动/消失/按钮跟随
 
 ### 全局状态字段（state.js）
 
@@ -178,29 +210,37 @@ MutationObserver
 
 ## 性能策略
 
+- **主循环按需启停**：鼠标静止且无命中时 rAF 循环完全停止，等待 mousemove 唤醒
+- **`mouseDirty` 标记**：mousemove 置 true，tick 内 hitTest 后置 false，避免鼠标静止时重复执行 `elementsFromPoint`
 - `mousemove` 使用 rAF 合并，1 帧仅处理最后一次坐标
-- `elementsFromPoint` 只在鼠标移动且坐标变化时触发
 - 弹幕解析结果只存 WeakMap，不做全局数组缓存
-- 解析/命中日志仅在 debug 模式输出
+- `setDbg` 调用仅在 `CONFIG.debug` 为 true 时执行，非 debug 模式零开销
+- 未开播降频：`noPlayerCount > 30` 后切换为 2s 低频轮询
+- 300ms 定时扫描仅补"未缓存"节点，不做全量解析
 
 ## 测试与验证清单
 
 1. 普通直播间：能命中滚动弹幕，按钮稳定显示
-2. 活动页/赛事页：容器选择器命中，MO 正常工作
+2. 活动页/赛事页：iframe 内脚本正常注入，弹幕命中与发送正常
 3. 全屏：按钮与调试面板正确迁移
 4. 文字+小表情+大表情混合：复读文本正确
 5. 弹幕消失后仍可点击：ghost 模式正常
 6. 高频移动鼠标：无明显卡顿
+7. 鼠标静止：CPU 占用降至零（无持续 rAF 循环）
+8. 长弹幕：按钮跟随鼠标位置，不远离指针
 
 ### 构建
 - esbuild: `entryPoints:['src/index.js']`, `format:'iife'`, `target:'es2015'`
 - banner注入完整==UserScript==头部（含@match/@grant/@run-at）
-- 产物：`bilibili-live-danmu-plus-one.user.js`（~600行）
+- @match: `*://live.bilibili.com/0*` ~ `9*`（数字房间号）+ `*://live.bilibili.com/blanc*`（活动页 iframe）
+- 产物：`bilibili-live-danmu-plus-one.user.js`
 
-## 已知问题
+## 已知限制
 
 1. **element回收导致漏检**：B站可能重用DOM元素（改textContent+重启动画），MO不会触发addedNodes，300ms扫描只能部分兜底
 2. **全屏容器查找**：不同直播间类型容器class可能不同，选择器链需持续维护
+3. **鼠标静止时新弹幕不可检测**：`mouseDirty=false` 时跳过 hitTest，新弹幕滚入鼠标位置直到鼠标再次移动才会触发检测（有意的性能/体验 tradeoff）
+4. **活动页房间切换**：Eva 框架管理多房间标签页，切换房间时 iframe 重建，脚本在新 iframe 内自动重新初始化
 
 ## 环境信息
 
