@@ -286,11 +286,15 @@
   function ensureSafeContainer() {
     if (!_safeContainer) {
       _safeContainer = document.createElement("div");
+      _safeContainer.dataset.dm1Safe = "1";
       _safeContainer.style.cssText = "position:fixed;inset:0;overflow:visible;pointer-events:none;z-index:" + (UI.Z_INDEX - 1);
     }
     var r = root();
     if (_safeContainer.parentNode !== r)
       r.appendChild(_safeContainer);
+    return _safeContainer;
+  }
+  function getSafeContainer() {
     return _safeContainer;
   }
   function rescue(el) {
@@ -575,7 +579,8 @@
   function unfreeze(el) {
     if (!el || el.dataset.dm1Frozen !== "1")
       return;
-    var wasInSafe = el.parentNode && el.parentNode === document.querySelector("[data-dm1-safe]");
+    var safeContainer = getSafeContainer();
+    var wasInSafe = el.parentNode && safeContainer && el.parentNode === safeContainer;
     el.style.animationPlayState = el.dataset.dm1OldAnimPlay || "";
     delete el.dataset.dm1OldAnimPlay;
     delete el.dataset.dm1Frozen;
@@ -583,7 +588,8 @@
       if (shouldRemoveGhostNow(el)) {
         if (el.parentNode)
           el.remove();
-      } else {
+      } else if (el.dataset.dm1RescueCleaned !== "1") {
+        el.dataset.dm1RescueCleaned = "1";
         el.addEventListener("animationend", function() {
           if (el.parentNode)
             el.remove();
@@ -623,7 +629,7 @@
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
   function findInput() {
-    return document.querySelector(".chat-input") || document.querySelector("textarea.chat-input") || document.querySelector("input.chat-input");
+    return document.querySelector("#fullscreen-danmaku-vm .chat-input") || document.querySelector(".chat-input");
   }
   function findSendBtn() {
     var btns = document.querySelectorAll("button");
@@ -700,19 +706,6 @@
     initDebugPanel();
     ensureSafeContainer();
     setupButtonEvents().injectSender(sendDanmaku);
-    plusBtn.addEventListener("mouseenter", function() {
-      if (state.leaveTimer) {
-        clearTimeout(state.leaveTimer);
-        state.leaveTimer = 0;
-      }
-    });
-    plusBtn.addEventListener("mouseleave", function() {
-      state.leaveTimer = setTimeout(function() {
-        state.leaveTimer = 0;
-        hideBtn();
-        clearCurrentHit();
-      }, TIMING.LEAVE_DELAY_MS);
-    });
     document.addEventListener("mousemove", function(e) {
       state.mouse.x = e.clientX;
       state.mouse.y = e.clientY;
@@ -727,6 +720,7 @@
       scheduleFrame();
     });
     var lastTickTime = 0;
+    var frameCount = 0;
     var containerWaitTimer = 0;
     function scheduleFrame() {
       if (state.rafScheduled)
@@ -791,7 +785,8 @@
       ensureSafeContainer();
       ensureDebugPanelParent();
       bindObserverTarget();
-      setDbg("frame", 1);
+      if (CONFIG.debug)
+        setDbg("frame", ++frameCount);
       if (state.currentHit && state.currentHit.el && !isElementAlive(state.currentHit.el)) {
         hideBtn();
         clearCurrentHit();

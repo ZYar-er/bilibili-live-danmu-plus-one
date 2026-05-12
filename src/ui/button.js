@@ -3,7 +3,7 @@ import { state } from '../state.js';
 import { root, isElementAlive, clamp } from '../utils.js';
 import { getScope } from '../core/env-detector.js';
 import { setDbg } from './debug-panel.js';
-import { rescue } from './safe-container.js';
+import { rescue, getSafeContainer } from './safe-container.js';
 
 export { rescue };
 
@@ -140,14 +140,16 @@ export function freeze(el) {
 
 export function unfreeze(el) {
   if (!el || el.dataset.dm1Frozen !== '1') return;
-  var wasInSafe = el.parentNode && el.parentNode === document.querySelector('[data-dm1-safe]');
+  var safeContainer = getSafeContainer();
+  var wasInSafe = el.parentNode && safeContainer && el.parentNode === safeContainer;
   el.style.animationPlayState = el.dataset.dm1OldAnimPlay || '';
   delete el.dataset.dm1OldAnimPlay;
   delete el.dataset.dm1Frozen;
   if (wasInSafe) {
     if (shouldRemoveGhostNow(el)) {
       if (el.parentNode) el.remove();
-    } else {
+    } else if (el.dataset.dm1RescueCleaned !== '1') {
+      el.dataset.dm1RescueCleaned = '1';
       el.addEventListener('animationend', function () { if (el.parentNode) el.remove(); });
       setTimeout(function () { if (el.parentNode) el.remove(); }, TIMING.GHOST_CLEANUP_MS);
     }

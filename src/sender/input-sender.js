@@ -12,9 +12,8 @@ function setNativeValue(el, value) {
 }
 
 function findInput() {
-  return document.querySelector('.chat-input')
-    || document.querySelector('textarea.chat-input')
-    || document.querySelector('input.chat-input');
+  return document.querySelector('#fullscreen-danmaku-vm .chat-input')
+    || document.querySelector('.chat-input');
 }
 
 function findSendBtn() {

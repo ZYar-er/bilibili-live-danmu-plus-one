@@ -47,18 +47,6 @@ import { sendDanmaku } from './sender/input-sender.js';
   // 注入 sendDanmaku 到按钮 click 事件
   setupButtonEvents().injectSender(sendDanmaku);
 
-  // ========= 按钮 mouseenter/mouseleave =========
-  plusBtn.addEventListener('mouseenter', function () {
-    if (state.leaveTimer) { clearTimeout(state.leaveTimer); state.leaveTimer = 0; }
-  });
-  plusBtn.addEventListener('mouseleave', function () {
-    state.leaveTimer = setTimeout(function () {
-      state.leaveTimer = 0;
-      hideBtn();
-      clearCurrentHit();
-    }, TIMING.LEAVE_DELAY_MS);
-  });
-
   // ========= mousemove（仅 debug 用）=========
   document.addEventListener('mousemove', function (e) {
     state.mouse.x = e.clientX;
@@ -78,6 +66,7 @@ import { sendDanmaku } from './sender/input-sender.js';
 
   // ========= 主循环 =========
   var lastTickTime = 0;
+  var frameCount = 0;
   var containerWaitTimer = 0;
 
   function scheduleFrame() {
@@ -142,7 +131,7 @@ import { sendDanmaku } from './sender/input-sender.js';
     ensureSafeContainer();
     ensureDebugPanelParent();
     bindObserverTarget();
-    setDbg('frame', 1); // debug 计数简化
+    if (CONFIG.debug) setDbg('frame', ++frameCount);
 
     if (state.currentHit && state.currentHit.el && !isElementAlive(state.currentHit.el)) {
       hideBtn();
