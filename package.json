@@ -2,6 +2,14 @@
   "name": "bilibili-live-danmu-plus-one",
   "version": "0.0.1",
   "private": true,
+  "description": "Bilibili live danmaku +1 Tampermonkey script",
+  "license": "MIT",
+  "author": "ZYar-er",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ZYar-er/bilibili-live-danmu-plus-one"
+  },
+  "homepage": "https://github.com/ZYar-er/bilibili-live-danmu-plus-one",
   "scripts": {
     "build": "node build.js"
   },

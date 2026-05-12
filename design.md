@@ -14,7 +14,7 @@ src/
     observer.js       # MutationObserver：监听弹幕注入/移除，事件绑定
     hit-test.js       # 鼠标命中检测（elementsFromPoint + rect fallback）
     danmu-parser.js   # 弹幕内容提取（文字/表情IMG/span.emoji）
-    env-detector.js   # 环境检测：活动iframe防护、全屏scope
+    env-detector.js   # 环境检测：全屏scope
   ui/
     button.js         # +1 按钮：创建、定位（getBoundingClientRect）、显示/隐藏、freeze/unfreeze
     debug-panel.js    # 固定定位调试面板，全屏时迁移到 fullscreenElement
@@ -22,81 +22,26 @@ src/
   sender/
     input-sender.js   # 发送：查找输入框、查找发送按钮、冷却管理、setNativeValue
   config.js           # 常量（TIMING/UI/DM_SELECTORS）+ 持久化（GM_getValue→localStorage）
-  state.js            # 全局状态：{currentHit,lastSendAt,clickLocked,mouse,rafScheduled,...}
+  state.js            # 全局状态：{currentHit,frozenRect,lastSendAt,lastClickAt,clickLocked,mouse,rafScheduled,...}
   utils.js            # 工具：root(),isElementAlive(),clamp(),pointInRect()
   index.js            # 入口：组装模块、主循环、Tampermonkey菜单
 build.js              # esbuild 打包：注入==UserScript==头，输出IIFE格式
 bilibili-live-danmu-plus-one.user.js  # 构建产物
 ```
 
-## 弹幕选中：两种方案分析
+## 弹幕命中与缓存策略
 
 B站弹幕DOM特征：
-- 容器：`.bili-danmaku-x-dm`（会被B站不断销毁重建）
-- 弹幕节点：`div.bili-danmaku-x-dm[role="comment"]`，可能附加 `.bili-danmaku-x-roll`、`.bili-danmaku-x-show`
-- 动画：CSS自定义属性 `--translateX`、`--duration`，通过keyframes移动
-- 容器级 `pointer-events:none` 使点击穿透到视频
+- 容器：`.danmaku-item-container`（会被B站不断销毁重建）
+- 弹幕节点：`div.bili-danmaku-x-dm[role="comment"]`
+- 动画：CSS 自定义属性驱动，容器层 `pointer-events:none`
 
-### 方案A：MutationObserver + 节点事件绑定（当前实现）
-
-```
-MO.observe(container, {childList:true, subtree:true})
-  → addedNodes → isDanmuNode(matches CSS selector)
-    → el.addEventListener('mouseenter', freeze+showBtn)
-    → el.addEventListener('mouseleave', delayHide)
-  → removedNodes → node.dm1Frozen? → rescue到safeContainer
-
-定期 scanAndBind(root, 300ms) 兜底捕获MO遗漏
-```
-
-| 优点 | 缺点 |
-|---|---|
-| 事件直接绑在节点上，响应快 | 依赖MO捕获addedNodes，元素回收时失效 |
-| 不依赖鼠标坐标，无CSS transform漂移 | 必须设el.style.pointerEvents='auto'覆盖B站 |
-| 按钮跟随弹幕节点，hover持续有效 | CSS选择器变化会导致matches()失败 |
-| 代码量小（~100行observer.js） | 初始扫描+定时兜底增加复杂度 |
-| | 全屏/SPA路由时需重绑MO+重扫 |
-
-### 方案B：mousemove + 坐标碰撞检测（旧版实现）
-
-```
-document.addEventListener('mousemove', capture:true)
-  → elementsFromPoint(x,y) 获取光标下元素栈
-    → 按z-index遍历 → isLikelyDmElement + pointInRect
-      → freeze + showBtn
-  → fallback: 遍历dmNodeList → getBoundingClientRect碰撞
-
-每rAF帧重建rectSnapshot WeakMap缓存
-```
-
-| 优点 | 缺点 |
-|---|---|
-| 不依赖MO绑定，每次mousemove实时查DOM | CSS transform可能导致getBoundingClientRect不准确 |
-| 不修改pointer-events，零副作用 | 每帧遍历dmNodeList+缓存rect，有开销 |
-| capture阶段绕过pointer-events:none | elementsFromPoint只返回点下元素，需回退扫描 |
-| 全屏天然工作，不依赖元素作用域 | 代码量较大（需rect快照/脏标记/碰撞逻辑） |
-| SPA路由/容器重建时只需重查DOM | |
-| 选择器脆弱性较低（用于filter而非绑定入口） | |
-
-### 推荐：方案B为主力 + MO辅助
-
-原因：
-1. **DOM查询天然容错**：不管B站如何创建/回收元素，mousemove时`elementsFromPoint`实时查询当前DOM，不会因绑定时机错过弹幕
-2. **零副作用**：不修改B站元素的pointer-events，不影响原有行为
-3. **全屏透明**：document级mousemove在任何DOM上下文中工作
-4. **已知缺陷可控**：CSS transform漂移可通过在freeze时使用`el.getBoundingClientRect()`（freeze时动画已暂停，rect准确）解决
-
-MO的辅助角色：
-- `addedNodes`：解析弹幕内容存入WeakMap缓存，避免mousemove时重复解析
-- `removedNodes`：救援冻结中弹幕到安全容器（已实现且稳定）
-
-### 最终落地策略（可执行）
-
-1. **主路径**：document 级 `mousemove` 捕获 + `elementsFromPoint` 进行命中
-2. **解析缓存**：MO 对新增弹幕做解析，结果缓存到 `WeakMap<el, parsed>`
-3. **兜底扫描**：每 300ms scan 一次现存弹幕，把未缓存的解析进 WeakMap
-4. **冻结时矫正**：freeze 时立即读取 `getBoundingClientRect()`，按 frozenRect 定位按钮
-5. **容器重建**：fullscreenchange/DOM 变动时重绑 MO，清空命中缓存
+当前实现：
+1. `mousemove` + `elementsFromPoint` 作为命中主路径
+2. MutationObserver 用于新增节点解析缓存与冻结节点救援
+3. 300ms 扫描兜底补缓存（仅补未缓存）
+4. 命中后 freeze，使用冻结时 rect 定位按钮
+5. 活动页外壳跳过初始化，iframe 内正常初始化
 
 ## 关键技术细节
 
@@ -105,19 +50,17 @@ MO的辅助角色：
 - unfreeze：恢复`animationPlayState`，若在安全容器中则监听`animationend`自清理 + 30s超时兜底
 
 ### ghost模式（弹幕被B站JS清理后保留）
-- MutationObserver remoedNodes回调中检测`el.dataset.dm1Frozen==='1'`
+- MutationObserver removedNodes回调中检测`el.dataset.dm1Frozen==='1'`
 - 移到dmSafeContainer（position:fixed;inset:0;overflow:visible;pointer-events:none）
 - 保持pointer-events:auto使弹幕仍可交互
 - 鼠标离开后unfreeze→animationend→remove
+
+补充：若 `animationend` 不会再触发（动画已结束或 duration 为 0），应在 unfreeze 后立即检查并直接 remove，避免 30s 兜底过长。
 
 ### 按钮防闪烁
 - 弹幕mouseleave→50ms setTimeout延迟隐藏
 - 按钮mouseenter→clearTimeout取消隐藏
 - 按钮mouseleave→50ms延迟隐藏（鼠标可能回弹幕）
-
-### 全屏适配
-- 所有DOM查询用`getScope() = document.fullscreenElement || document`
-- overlay元素（按钮/面板/容器）在tick()中检查并迁移parentNode
 - fullscreenchange→设dmObserverTarget=null强制重绑MO
 
 ### 弹幕文本提取（danmu-parser.js）
@@ -127,31 +70,40 @@ MO的辅助角色：
 - SPAN.emoji → textContent
 - 空文本弹幕 → 返回{type:'unknown',text:''}，不显示按钮
 
+补充：当前版本可正常支持标准 emoji（Unicode 字符）。
+补充：B站特殊 emoji 的机制为输入框发送形如 `[XX]` 的文本后由前端解析为图片并插入文本中。由于需要先收集完整的特殊 emoji id 列表，先搁置适配；当前会跳过无名称表情，不再附加 `[表情]` 占位。
+
 ### 选择器策略
 - DM_NODE_SELECTOR = `.bili-danmaku-x-dm[role="comment"]`
 - DM_CONTAINER_SELECTORS = 优先级链：`#live-player .web-player-danmaku .danmaku-item-container` → `.danmaku-item-container` → `.web-player-danmaku` → `.live-player-dm-wrap`
 - 选择器链通过`firstMatch(scope,selectors)`遍历，返回首个存在的元素
 
+### 实测结论（来自 dev/inspector）
+
+- 活动页外层是活动页 `<html lang="zh-Hans" ...>`，直播间在 iframe（`/blanc/{roomId}`）内，iframe 内是正常页面 `<html lab-style="dark">`
+- 弹幕节点稳定特征：`div.bili-danmaku-x-dm[role="comment"]`
+- 常见修饰类：`.bili-danmaku-x-roll`、`.bili-danmaku-x-show`
+- 表情节点主要为 `IMG.bili-danmaku-x-dm-emoji`（未见 `span.emoji`）
+- 部分节点在动画未开始时 `rect` 为 0，应在 freeze 后再取 rect 定位按钮
+
+
 ## 数据流与状态
 
 ### 数据流（简化）
-
 ```
 mousemove -> hitTest(elementsFromPoint)
   -> resolveDanmuNode
   -> getParsedText (WeakMap cache, or parse on demand)
-  -> freeze + showButton
-  -> click -> send
 
 MutationObserver
   -> addedNodes -> parse + cache
-  -> removedNodes -> ghost rescue
 ```
 
 ### 全局状态字段（state.js）
 
 当前实现字段：
 - `currentHit`: 当前命中的弹幕节点（`{ el, text, type }`）
+- `frozenRect`: 冻结时的 rect 快照（用于按钮稳定定位）
 - `lastSendAt`: 最近一次发送时间戳
 - `lastClickAt`: 最近一次点击时间戳
 - `clickLocked`: 发送冷却锁
@@ -160,11 +112,6 @@ MutationObserver
 - `noPlayerCount`: 连续找不到容器的计数
 - `dmObserverTarget`: 当前 MO 绑定目标
 - `leaveTimer`: 悬停离开延迟计时器
-
-拟新增字段（用于 hit-test）：
-- `frozenRect`: 冻结时的 rect 快照（用于按钮稳定定位）
-- `lastHitAt`: 最近一次命中时间戳（用于节流）
-- `hitSource`: 命中来源（`elementsFromPoint` / `fallbackScan`）
 
 ## 边界与异常处理
 
@@ -176,9 +123,15 @@ MutationObserver
 
 ## 选择器与环境检测策略
 
-- 主 frame 初始化，活动 iframe 直接跳过
+- 活动页外壳跳过初始化，iframe 内正常初始化
 - 选择器优先级链维护在 `config.js`
 - 支持通过调试面板实时查看命中选择器和节点结构
+
+### 缓存失效策略
+
+- MO 新增节点时解析并缓存
+- 命中时做一次轻量校验：若 `parseText(el)` 与缓存不一致，更新缓存
+- 扫描兜底只补“未缓存”的节点，避免全量解析
 
 ## 命中检测模块（core/hit-test.js）
 
@@ -194,6 +147,11 @@ MutationObserver
 2. 从栈内向上找最近的弹幕节点（`DM_NODE_SELECTOR`）
 3. 若未命中，执行 `fallbackScan` 遍历当前容器内弹幕
 4. 命中后返回 `{ el, rect, source }`
+
+容器范围职责：
+
+- `hit-test.js` 内部获取容器与 `rect`，并先做范围短路
+- 若容器为 `null`，自动降级为全局命中（不依赖容器）
 
 ## Debug 面板字段规范
 
@@ -213,7 +171,7 @@ MutationObserver
 - `cooldownMs`: number，冷却时长
 - `fullscreen`: boolean，全屏状态
 
-拟新增字段（命中链路可视化）：
+命中链路字段：
 - `hitSource`: string，`elementsFromPoint` 或 `fallbackScan`
 - `hitSelector`: string，命中节点的简短选择器路径
 - `hitRect`: string，`left,top,width,height`（冻结时快照）
@@ -243,15 +201,6 @@ MutationObserver
 
 1. **element回收导致漏检**：B站可能重用DOM元素（改textContent+重启动画），MO不会触发addedNodes，300ms扫描只能部分兜底
 2. **全屏容器查找**：不同直播间类型容器class可能不同，选择器链需持续维护
-3. **pointer-events副作用**：方案A的pointer-events:auto在某些B站UI场景下可能干扰弹幕层的点击穿透行为
-
-## 后续开发任务建议（按优先级）
-
-1. 将 hitTest 逻辑从 observer.js 独立为 `core/hit-test.js`
-2. 在 `debug-panel` 中增加命中路径和解析结果展示
-3. 对 `input-sender` 增加容错：找不到输入框时延迟重试
-4. 增加“忽略关键词/主播黑名单”配置项
-5. 增加本地日志开关和采样比例
 
 ## 环境信息
 

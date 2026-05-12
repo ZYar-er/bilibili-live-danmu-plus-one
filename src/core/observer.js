@@ -2,7 +2,7 @@ import { getScope } from './env-detector.js';
 import { DM_CONTAINER_SELECTORS, DM_NODE_SELECTOR } from '../config.js';
 import { state } from '../state.js';
 import { getDmText } from './danmu-parser.js';
-import { showBtn, hideBtn, clearCurrentHit, freeze } from '../ui/button.js';
+import { cacheParsed, getCachedParsed } from './hit-test.js';
 import { rescue } from '../ui/safe-container.js';
 import { setDbg } from '../ui/debug-panel.js';
 
@@ -21,44 +21,28 @@ export function isDanmuNode(node) {
   return false;
 }
 
-function attachEvents(el) {
+function cacheIfNeeded(el) {
   if (!(el instanceof HTMLElement)) return;
-  if (el.dataset.dm1Bound === '1') return;
-  el.dataset.dm1Bound = '1';
-  el.style.pointerEvents = 'auto';
-
-  el.addEventListener('mouseenter', function () {
-    if (state.leaveTimer) { clearTimeout(state.leaveTimer); state.leaveTimer = 0; }
-    var payload = getDmText(el);
-    if (!payload.text) return;
-    if (state.currentHit && state.currentHit.el === el) return;
-    if (state.currentHit) { hideBtn(); clearCurrentHit(); }
-    state.currentHit = { el: el, text: payload.text, type: payload.type };
-    freeze(el);
-    setDbg('hitText', payload.text);
-    setDbg('hitType', payload.type);
-    setDbg('currentConnected', true);
-    showBtn(el);
-  });
-
-  el.addEventListener('mouseleave', function () {
-    state.leaveTimer = setTimeout(function () {
-      state.leaveTimer = 0;
-      hideBtn();
-      clearCurrentHit();
-    }, 50);
-  });
+  var cached = getCachedParsed(el);
+  if (cached) return;
+  var parsed = getDmText(el);
+  cacheParsed(el, parsed);
 }
 
-export function scanAndBind(root) {
+export function scanAndCache(root) {
   if (!root || !root.querySelectorAll) return;
   var nodes = root.querySelectorAll(DM_NODE_SELECTOR);
-  var boundCount = 0;
+  var count = 0;
   for (var i = 0; i < nodes.length; i++) {
-    attachEvents(nodes[i]);
-    boundCount++;
+    cacheIfNeeded(nodes[i]);
+    count++;
   }
-  setDbg('dmCount', boundCount);
+  var container = findDmContainer();
+  if (container && root === container) {
+    setDbg('dmCount', count);
+  } else if (!container) {
+    setDbg('dmCount', 0);
+  }
 }
 
 export function findDmContainer() {
@@ -85,8 +69,8 @@ export function bindObserverTarget() {
       var removed = mutations[mi].removedNodes;
       for (var ai = 0; ai < added.length; ai++) {
         var node = added[ai];
-        if (isDanmuNode(node)) attachEvents(node);
-        if (node.nodeType === Node.ELEMENT_NODE) scanAndBind(node);
+        if (isDanmuNode(node)) cacheIfNeeded(node);
+        if (node.nodeType === Node.ELEMENT_NODE) scanAndCache(node);
       }
       for (var ri = 0; ri < removed.length; ri++) {
         var rm = removed[ri];

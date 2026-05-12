@@ -12,7 +12,8 @@ export function getDmText(el) {
       if (!name && child.classList.contains('bili-danmaku-x-dm-emoji')) {
         name = '表情';
       }
-      parts.push({ type: 'emoji', value: name ? '[' + name + ']' : EMOJI_FALLBACK });
+      // Skip fallback text for special emoji until we add proper support.
+      if (name) parts.push({ type: 'emoji', value: '[' + name + ']' });
     } else if (child.tagName === 'SPAN' && child.classList.contains('emoji')) {
       parts.push({ type: 'emoji-sm', value: child.textContent });
     }

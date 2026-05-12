@@ -2,11 +2,24 @@ import { UI } from '../config.js';
 import { CONFIG } from '../config.js';
 import { state } from '../state.js';
 import { root } from '../utils.js';
-import { getScope } from '../core/env-detector.js';
+import { getScope, isActivityShell } from '../core/env-detector.js';
 
 var _debugPanel;
 
 export function initDebugPanel() {
+  if (isActivityShell()) {
+    var existingTop = document.querySelector('[data-dm1-debug="1"]');
+    if (existingTop) existingTop.remove();
+    return null;
+  }
+  if (_debugPanel && _debugPanel.isConnected) return _debugPanel;
+  var existing = document.querySelector('[data-dm1-debug="1"]');
+  if (existing) {
+    _debugPanel = existing;
+    _debugPanel.style.display = CONFIG.debug ? 'block' : 'none';
+    ensureDebugPanelParent();
+    return _debugPanel;
+  }
   _debugPanel = document.createElement('div');
   _debugPanel.dataset.dm1Debug = '1';
   _debugPanel.style.cssText = 'position:fixed;left:10px;top:10px;z-index:' + UI.Z_INDEX
@@ -26,6 +39,7 @@ export function ensureDebugPanelParent() {
 var DBG = {
   frame: 0, dmCount: 0, mouse: '0,0',
   hitText: '', hitType: '', btnVisible: false, frozen: false,
+  hitSource: '', hitSelector: '', hitRect: '',
   currentConnected: false, lastSend: '', lastErr: '', fullscreen: false,
   cooldownMs: CONFIG.cooldownMs,
   enableSendCooldown: CONFIG.enableSendCooldown,
@@ -45,6 +59,9 @@ export function renderDebug() {
     + 'mouse            : ' + DBG.mouse + '\n'
     + 'hitType          : ' + (DBG.hitType || '(none)') + '\n'
     + 'hitText          : ' + (DBG.hitText || '(none)') + '\n'
+    + 'hitSource        : ' + (DBG.hitSource || '(none)') + '\n'
+    + 'hitSelector      : ' + (DBG.hitSelector || '(none)') + '\n'
+    + 'hitRect          : ' + (DBG.hitRect || '(none)') + '\n'
     + 'btnVisible       : ' + DBG.btnVisible + '\n'
     + 'frozen           : ' + DBG.frozen + '\n'
     + 'currentConnected : ' + DBG.currentConnected + '\n'

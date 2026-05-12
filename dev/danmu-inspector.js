@@ -4,6 +4,7 @@
   var LOG_LIMIT = 20;
   var count = 0;
   var observer = null;
+  var results = [];
 
   var CANDIDATES = [
     '.bili-danmaku-x-dm',
@@ -70,19 +71,43 @@
     var text = (node.innerText || '').slice(0, 80);
     count += 1;
 
-    console.groupCollapsed('[DM #' + count + '] ' + (node.tagName || 'UNKNOWN') + ' "' + text + '"');
-    console.log('element:', node);
-    console.log('className:', node.className || '');
-    console.log('selectorPath:', selectorPath(node));
-    console.log('childTypes:', childTypes(node));
-    console.log('dataset:', Object.assign({}, node.dataset || {}));
-    console.log('animation:', (getComputedStyle(node).animation || '').slice(0, 120));
-    console.groupEnd();
+    results.push({
+      tag: (node.tagName || 'UNKNOWN').toLowerCase(),
+      className: node.className || '',
+      selector: selectorPath(node),
+      text: text,
+      children: childTypes(node),
+    });
+
+    var tag = (node.tagName || 'UNKNOWN').toLowerCase();
+    var cls = node.classList && node.classList.length
+      ? '.' + Array.prototype.slice.call(node.classList, 0, 3).join('.')
+      : '';
+    var line1 = '[DM #' + count + '] ' + tag + cls + ' | "' + text + '"';
+    var line2 = '  selector: ' + selectorPath(node);
+    var line3 = '  children: ' + childTypes(node).join(', ');
+    console.log(line1 + '\n' + line2 + '\n' + line3);
+    console.log('[Inspector] captured: ' + count + '/' + LOG_LIMIT);
 
     if (count >= LOG_LIMIT && observer) {
       observer.disconnect();
       console.log('[Inspector] 已捕获 ' + LOG_LIMIT + ' 条，自动停止');
     }
+  }
+
+  function downloadResults() {
+    var payload = JSON.stringify({
+      count: results.length,
+      time: new Date().toISOString(),
+      items: results,
+    }, null, 2);
+    var blob = new Blob([payload], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'danmu-inspector-' + Date.now() + '.json';
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
 
   var container = findContainer();
@@ -97,5 +122,8 @@
 
   observer.observe(container, { childList: true, subtree: true });
   window.__danmuInspector = observer;
-  console.log('[DanmuInspector] 已启动，将连续输出 ' + LOG_LIMIT + ' 条命中结果后自动停止。手动停止：window.__danmuInspector.disconnect()');
+  window.__danmuInspectorDownload = downloadResults;
+  console.log('[DanmuInspector] 已启动，将连续输出 ' + LOG_LIMIT + ' 条命中结果后自动停止。');
+  console.log('[DanmuInspector] 停止：window.__danmuInspector.disconnect()');
+  console.log('[DanmuInspector] 导出：window.__danmuInspectorDownload()');
 })();

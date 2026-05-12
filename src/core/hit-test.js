@@ -1,4 +1,4 @@
-import { DM_NODE_SELECTOR, UI } from '../config.js';
+import { DM_NODE_SELECTOR, DM_CONTAINER_SELECTORS, UI } from '../config.js';
 import { pointInRect, isElementAlive } from '../utils.js';
 import { getScope } from './env-detector.js';
 
@@ -26,6 +26,20 @@ function resolveDanmuNode(node) {
   return null;
 }
 
+function firstMatch(scope, selectors) {
+  if (!scope || !scope.querySelector) return null;
+  for (var i = 0; i < selectors.length; i++) {
+    var el = scope.querySelector(selectors[i]);
+    if (el) return el;
+  }
+  return null;
+}
+
+function resolveContainer(container) {
+  if (container && isElementAlive(container)) return container;
+  return firstMatch(getScope(), DM_CONTAINER_SELECTORS);
+}
+
 function buildSelector(el) {
   var parts = [];
   var cur = el;
@@ -46,11 +60,12 @@ function rectText(r) {
     + Math.round(r.width) + ',' + Math.round(r.height);
 }
 
-export function hitTestFromStack(x, y) {
+export function hitTestFromStack(x, y, container) {
   var stack = document.elementsFromPoint(x, y);
   for (var i = 0; i < stack.length; i++) {
     var el = resolveDanmuNode(stack[i]);
     if (!el) continue;
+    if (container && !container.contains(el)) continue;
     if (!isElementAlive(el)) continue;
     var r = el.getBoundingClientRect();
     if (r.width <= 4) continue;
@@ -77,7 +92,12 @@ export function fallbackScan(container, x, y) {
 
 export function hitTest(x, y, container) {
   if (x == null || y == null) return null;
-  var hit = hitTestFromStack(x, y);
+  var dmContainer = resolveContainer(container);
+  if (dmContainer) {
+    var cr = dmContainer.getBoundingClientRect();
+    if (cr.width > 0 && cr.height > 0 && !pointInRect(x, y, cr, UI.HIT_PADDING_PX)) return null;
+  }
+  var hit = hitTestFromStack(x, y, dmContainer);
   if (hit) return hit;
-  return fallbackScan(container, x, y);
+  return fallbackScan(dmContainer, x, y);
 }

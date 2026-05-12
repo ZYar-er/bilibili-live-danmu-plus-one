@@ -1,20 +1,44 @@
-import { TIMING, CONFIG, UI, storageSet, PLAYER_SELECTORS } from './config.js';
+import { TIMING, CONFIG, UI, storageSet, PLAYER_SELECTORS, DM_NODE_SELECTOR, DM_CONTAINER_SELECTORS } from './config.js';
 import { state } from './state.js';
-import { root, isElementAlive } from './utils.js';
-import { isMainFrame, getScope } from './core/env-detector.js';
-import { scanAndBind, findDmContainer, bindObserverTarget } from './core/observer.js';
-import { createPlusBtn, showBtn, hideBtn, placeBtnTick, mountOverlay, setupButtonEvents, clearCurrentHit } from './ui/button.js';
+import { isElementAlive } from './utils.js';
+import { getScope, isActivityShell } from './core/env-detector.js';
+import { scanAndCache, findDmContainer, bindObserverTarget } from './core/observer.js';
+import { hitTest, cacheParsed, getCachedParsed } from './core/hit-test.js';
+import { getDmText } from './core/danmu-parser.js';
+import { createPlusBtn, showBtn, hideBtn, placeBtnTick, mountOverlay, setupButtonEvents, clearCurrentHit, freeze } from './ui/button.js';
 import { initDebugPanel, ensureDebugPanelParent, setDbg, renderDebug } from './ui/debug-panel.js';
 import { ensureSafeContainer } from './ui/safe-container.js';
 import { sendDanmaku } from './sender/input-sender.js';
 
 (function init() {
-  // ========= 活动 iframe 防护 =========
-  if (!isMainFrame()) {
-    console.log('[DM+1] activity iframe detected, skipping init');
+  if (isActivityShell()) {
+    console.log('[DM+1] activity shell detected, skip init in top document');
     return;
   }
 
+  function hasLocalDanmaku() {
+    return !!(findDmContainer()
+      || getScope().querySelector(DM_NODE_SELECTOR)
+      || getScope().querySelector(DM_CONTAINER_SELECTORS.join(',')));
+  }
+
+  function hasDanmakuInIframes() {
+    if (window.self !== window.top) return false;
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) {
+      try {
+        var d = frames[i].contentDocument;
+        if (!d) continue;
+        if (d.querySelector(DM_NODE_SELECTOR) || d.querySelector(DM_CONTAINER_SELECTORS.join(','))) return true;
+      } catch (e) {}
+    }
+    return false;
+  }
+
+  if (!hasLocalDanmaku() && hasDanmakuInIframes()) {
+    console.log('[DM+1] danmaku detected inside iframe, skip init in top document');
+    return;
+  }
   // ========= 创建 UI =========
   var plusBtn = createPlusBtn();
   initDebugPanel();
@@ -39,7 +63,7 @@ import { sendDanmaku } from './sender/input-sender.js';
   document.addEventListener('mousemove', function (e) {
     state.mouse.x = e.clientX;
     state.mouse.y = e.clientY;
-    setDbg('mouse', state.mouse.x + ',' + state.mouse.y);
+    scheduleFrame();
   }, { capture: true, passive: true });
 
   // ========= 全屏 =========
@@ -67,17 +91,41 @@ import { sendDanmaku } from './sender/input-sender.js';
     containerWaitTimer = setInterval(function () {
       var container = findDmContainer();
       if (container) {
-        scanAndBind(container);
+        scanAndCache(container);
         clearInterval(containerWaitTimer);
         containerWaitTimer = 0;
       }
     }, TIMING.DM_WAIT_POLL_MS);
   }
 
+  function resolvePayload(el) {
+    var cached = getCachedParsed(el);
+    var parsed = getDmText(el);
+    if (!cached || cached.text !== parsed.text || cached.type !== parsed.type) {
+      cacheParsed(el, parsed);
+      cached = parsed;
+    }
+    return cached;
+  }
+
+  function handleNoHit() {
+    if (!state.currentHit) return;
+    if (state.leaveTimer) return;
+    state.leaveTimer = setTimeout(function () {
+      state.leaveTimer = 0;
+      hideBtn();
+      clearCurrentHit();
+      setDbg('hitSource', '');
+      setDbg('hitSelector', '');
+      setDbg('hitRect', '');
+    }, TIMING.LEAVE_DELAY_MS);
+  }
+
   function tick() {
     state.rafScheduled = false;
     lastTickTime = performance.now();
     var dmContainer = findDmContainer();
+    setDbg('mouse', state.mouse.x + ',' + state.mouse.y);
 
     if (!dmContainer) {
       state.noPlayerCount++;
@@ -96,10 +144,43 @@ import { sendDanmaku } from './sender/input-sender.js';
     bindObserverTarget();
     setDbg('frame', 1); // debug 计数简化
 
+    if (state.currentHit && state.currentHit.el && !isElementAlive(state.currentHit.el)) {
+      hideBtn();
+      clearCurrentHit();
+    }
+
+    var hit = hitTest(state.mouse.x, state.mouse.y, dmContainer);
+    if (!hit) {
+      handleNoHit();
+    } else {
+      if (state.leaveTimer) { clearTimeout(state.leaveTimer); state.leaveTimer = 0; }
+      var payload = resolvePayload(hit.el);
+      if (!payload.text) {
+        handleNoHit();
+      } else {
+        if (!state.currentHit || state.currentHit.el !== hit.el) {
+          if (state.currentHit) { hideBtn(); clearCurrentHit(); }
+          state.currentHit = { el: hit.el, text: payload.text, type: payload.type };
+          freeze(hit.el);
+          state.frozenRect = hit.rect;
+          showBtn(hit.el, state.frozenRect);
+        } else {
+          state.currentHit.text = payload.text;
+          state.currentHit.type = payload.type;
+        }
+        setDbg('hitText', payload.text);
+        setDbg('hitType', payload.type);
+        setDbg('hitSource', hit.source || '');
+        setDbg('hitSelector', hit.selector || '');
+        setDbg('hitRect', hit.rectText || '');
+        setDbg('currentConnected', true);
+      }
+    }
+
     // 按钮跟随
     if (state.currentHit && state.currentHit.el) {
       setDbg('currentConnected', isElementAlive(state.currentHit.el));
-      placeBtnTick(state.currentHit.el);
+      placeBtnTick(state.currentHit.el, state.frozenRect);
     }
 
     scheduleFrame();
@@ -158,14 +239,16 @@ import { sendDanmaku } from './sender/input-sender.js';
   registerMenus();
 
   // 初始扫描
-  var container = findDmContainer() || getScope().querySelector(PLAYER_SELECTORS) || getScope();
-  scanAndBind(container);
+  var container = findDmContainer();
+  if (container) scanAndCache(container);
+  else setDbg('dmCount', 0);
   startContainerWaiter();
 
   // 定期兜底扫描（高频，减少漏绑）
   setInterval(function () {
-    var scope = findDmContainer() || getScope().querySelector(PLAYER_SELECTORS) || getScope();
-    scanAndBind(scope);
+    var scope = findDmContainer();
+    if (scope) scanAndCache(scope);
+    else setDbg('dmCount', 0);
   }, TIMING.DM_SCAN_POLL_MS);
 
   scheduleFrame();

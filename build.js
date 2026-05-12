@@ -20,6 +20,7 @@ const userscriptBanner = `// ==UserScript==
 // @match        *://live.bilibili.com/7*
 // @match        *://live.bilibili.com/8*
 // @match        *://live.bilibili.com/9*
+// @match        *://live.bilibili.com/blanc*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand

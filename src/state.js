@@ -1,5 +1,6 @@
 export const state = {
   currentHit: null,       // { el, text, type }
+  frozenRect: null,
   lastSendAt: 0,
   lastClickAt: 0,
   clickLocked: false,

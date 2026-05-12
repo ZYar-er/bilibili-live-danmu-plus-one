@@ -17,23 +17,27 @@ export function createPlusBtn() {
   return _plusBtn;
 }
 
-function placeBtn(el) {
+function placeBtn(el, rect) {
   if (!el || !isElementAlive(el)) return;
-  var r = el.getBoundingClientRect();
+  var r = rect || el.getBoundingClientRect();
   if (r.width <= 4) return;
-  var x = r.left + r.width * UI.HORIZONTAL_RATIO;
+  // X 跟随鼠标，clamp 到弹幕矩形内（留出按钮半宽边距）
+  var halfW = UI.BTN_APPROX_W / 2;
+  var x = clamp(state.mouse.x, r.left + halfW, r.right - halfW);
+  // 弹幕太窄放不下按钮时，退回到弹幕中心
+  if (r.right - r.left < UI.BTN_APPROX_W) x = r.left + r.width / 2;
   var y = r.top + r.height / 2;
   var m = UI.MARGIN_PX;
-  x = clamp(x, m + UI.BTN_APPROX_W / 2, innerWidth - m - UI.BTN_APPROX_W / 2);
+  x = clamp(x, m + halfW, innerWidth - m - halfW);
   y = clamp(y, m + UI.BTN_APPROX_H / 2, innerHeight - m - UI.BTN_APPROX_H / 2);
   _plusBtn.style.left = x + 'px';
   _plusBtn.style.top = y + 'px';
 }
 
-export function showBtn(el) {
+export function showBtn(el, rect) {
   var r = root();
   if (_plusBtn.parentNode !== r) r.appendChild(_plusBtn);
-  placeBtn(el);
+  placeBtn(el, rect);
   _plusBtn.style.display = 'block';
   setDbg('btnVisible', true);
 }
@@ -43,8 +47,8 @@ export function hideBtn() {
   setDbg('btnVisible', false);
 }
 
-export function placeBtnTick(el) {
-  placeBtn(el);
+export function placeBtnTick(el, rect) {
+  placeBtn(el, rect);
 }
 
 export function mountOverlay() {
@@ -104,6 +108,26 @@ function resetBtnFeedback() {
   _plusBtn.style.cursor = '';
 }
 
+function parseDurationMs(value) {
+  var v = String(value || '').trim();
+  if (!v) return 0;
+  if (v.endsWith('ms')) return parseFloat(v) || 0;
+  if (v.endsWith('s')) return (parseFloat(v) || 0) * 1000;
+  return parseFloat(v) || 0;
+}
+
+function shouldRemoveGhostNow(el) {
+  var cs = getComputedStyle(el);
+  if (!cs) return false;
+  var name = cs.animationName;
+  if (!name || name === 'none') return true;
+  var durations = String(cs.animationDuration || '').split(',');
+  for (var i = 0; i < durations.length; i++) {
+    if (parseDurationMs(durations[i]) > 0) return false;
+  }
+  return true;
+}
+
 // ===== freeze / unfreeze / clearCurrentHit =====
 export function freeze(el) {
   if (!isElementAlive(el)) return;
@@ -121,8 +145,12 @@ export function unfreeze(el) {
   delete el.dataset.dm1OldAnimPlay;
   delete el.dataset.dm1Frozen;
   if (wasInSafe) {
-    el.addEventListener('animationend', function () { if (el.parentNode) el.remove(); });
-    setTimeout(function () { if (el.parentNode) el.remove(); }, TIMING.GHOST_CLEANUP_MS);
+    if (shouldRemoveGhostNow(el)) {
+      if (el.parentNode) el.remove();
+    } else {
+      el.addEventListener('animationend', function () { if (el.parentNode) el.remove(); });
+      setTimeout(function () { if (el.parentNode) el.remove(); }, TIMING.GHOST_CLEANUP_MS);
+    }
   }
   setDbg('frozen', false);
 }
@@ -137,6 +165,7 @@ export function clearCurrentHit() {
     }
   }
   state.currentHit = null;
+  state.frozenRect = null;
   setDbg('hitText', '');
   setDbg('hitType', '');
   setDbg('currentConnected', false);

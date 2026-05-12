@@ -13,7 +13,6 @@ export const TIMING = {
 export const UI = {
   HIT_PADDING_PX: 2,
   MARGIN_PX: 8,
-  HORIZONTAL_RATIO: 0.4,
   BTN_APPROX_W: 42,
   BTN_APPROX_H: 26,
   Z_INDEX: 2147483647,

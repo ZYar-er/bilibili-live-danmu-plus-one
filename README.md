@@ -5,12 +5,12 @@
 
 鼠标悬停 B站直播弹幕，一键发送同款弹幕 +1。
 
-> **v0.0.1** — 大部分代码由 Claude Code (Anthropic) 辅助生成，人工审核与调优。
+> **v0.0.1** — 大部分代码由 AI 辅助生成（Claude Code 使用 deepseek-v4 与 mimo-v2.5 模型，另含 GitHub Copilot），人工审核与调优。
 
 ## 功能
 
 - **悬停即用** — 鼠标划过任意弹幕，弹出 `+1` 按钮，点击即发
-- **Emoji 支持** — 兼容文字 emoji、B站小表情和房间专属大表情，自动解析为 `[表情名]` 格式
+- **Emoji 支持** — 兼容文字 emoji、常规表情（带名称的表情图）；特殊 emoji 暂不适配
 - **图文混合** — 正确处理 "哈哈哈[大笑]笑死" 等混合弹幕内容
 - **弹幕冻结恢复** — 悬停时弹幕冻结，移开后从冻结位置继续滚动直至自然消失
 - **发送冷却** — 可配置间隔防刷屏（默认 2s），也可关闭
@@ -56,8 +56,11 @@
 frame            : 1234       # rAF 帧计数
 dmCount          : 35         # 当前页面的弹幕 DOM 数量
 mouse            : 640,480    # 鼠标坐标
-hitType          : text       # 当前命中的弹幕类型 (text/emoji/emoji-large/mixed)
+hitType          : text       # 当前命中的弹幕类型 (text/emoji/emoji-sm/mixed)
 hitText          : 233333     # 当前命中的弹幕文字
+hitSource        : elementsFromPoint  # 命中来源 (elementsFromPoint/fallbackScan)
+hitSelector      : div.bili-danmaku-x-dm... # 命中节点路径
+hitRect          : 120,80,300,36 # 命中矩形 (left,top,width,height)
 btnVisible       : true       # +1 按钮是否可见
 frozen           : true       # 当前弹幕动画是否暂停
 currentConnected : true       # 命中元素是否仍在 DOM 中
@@ -72,28 +75,45 @@ fullscreen       : false      # 是否全屏
 
 - Chrome 90+ / Edge 90+ / Firefox 90+
 - Tampermonkey ≥ 5.0
-- B站直播间（普通直播、赛事直播、全屏模式均测试通过）
+- B站直播间（普通直播、赛事直播/活动页 iframe、全屏模式均测试通过）
 
 ## 已知问题
 
-### 部分直播间出现双调试面板
+### 特殊 emoji 暂不适配
 
-某些带有活动横幅（activity banner）的直播间页面会通过同源 iframe 嵌入额外内容，由于 `@match` 通配这些 iframe 的 URL，脚本会在 iframe 中重复执行，导致出现两个调试面板。
-
-**临时方案**：关闭调试面板（默认关闭），功能不受影响。
-
-**期望修复**：如果了解如何精确区分主页面与 activity iframe 的 DOM 环境，欢迎提交 PR 或 Issue 讨论。
+B站特殊 emoji 需要完整的 id 列表才能准确映射，目前会跳过无名称表情（不再附加 `[表情]` 占位）。
 
 ## 开发
 
-本项目由 [Claude Code](https://claude.ai/code) (Anthropic) 辅助完成大部分代码编写，人工负责需求定义、功能验证与最终调优。
+本项目由 [Claude Code](https://claude.ai/code) 辅助完成大部分代码编写（使用 deepseek-v4 与 mimo-v2.5），并结合 GitHub Copilot。人工负责需求定义、功能验证与最终调优。
 
 ```
-bilibili-live-danmu-plus-one.user.js   # 插件本体（可直接安装到 Tampermonkey）
-reference/                             # 参考脚本（不纳入版本管理）
+[bilibili-live-danmu-plus-one.user.js](bilibili-live-danmu-plus-one.user.js)   # 构建产物（可直接安装到 Tampermonkey）
+[reference/](reference/)                             # 参考脚本（不纳入版本管理）
 ```
 
-修改后直接在 Tampermonkey 管理面板中编辑更新即可，无需构建工具。
+安装依赖并构建：
+
+```
+npm install
+npm run build
+```
+
+构建产物输出到 [bilibili-live-danmu-plus-one.user.js](bilibili-live-danmu-plus-one.user.js)。
+
+## 构建与发布
+
+1. 更新版本号（可选）：在 [package.json](package.json) 与 userscript 头部保持一致
+2. 运行构建：`npm run build`
+3. 将最新构建产物发布到仓库（或替换已安装脚本）
+
+## 贡献
+
+欢迎提交 Issue 或 PR。建议在提交前自测以下场景：
+
+- 普通直播间高频弹幕
+- 活动页 iframe 直播间
+- 全屏切换
 
 ## 作者
 

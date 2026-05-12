@@ -12,10 +12,9 @@ function setNativeValue(el, value) {
 }
 
 function findInput() {
-  return document.querySelector('textarea[placeholder*="弹幕"]')
-    || document.querySelector('textarea')
-    || document.querySelector('input[placeholder*="弹幕"]')
-    || document.querySelector('input[type="text"]');
+  return document.querySelector('.chat-input')
+    || document.querySelector('textarea.chat-input')
+    || document.querySelector('input.chat-input');
 }
 
 function findSendBtn() {

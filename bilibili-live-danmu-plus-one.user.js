@@ -17,6 +17,7 @@
 // @match        *://live.bilibili.com/7*
 // @match        *://live.bilibili.com/8*
 // @match        *://live.bilibili.com/9*
+// @match        *://live.bilibili.com/blanc*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
@@ -42,13 +43,11 @@
   var UI = {
     HIT_PADDING_PX: 2,
     MARGIN_PX: 8,
-    HORIZONTAL_RATIO: 0.4,
     BTN_APPROX_W: 42,
     BTN_APPROX_H: 26,
     Z_INDEX: 2147483647,
     OPACITY_OPTIONS: [0.3, 0.5, 0.7, 0.8, 0.95]
   };
-  var EMOJI_FALLBACK = "[\u8868\u60C5]";
   var DM_CONTAINER_SELECTORS = [
     "#live-player .web-player-danmaku .danmaku-item-container",
     "#live-player .danmaku-item-container",
@@ -59,7 +58,6 @@
     ".live-player-dm-wrap"
   ];
   var DM_NODE_SELECTOR = '.bili-danmaku-x-dm[role="comment"]';
-  var PLAYER_SELECTORS = ".bilibili-live-player-video, #live-player, .live-player-container";
   function storageGet(key, def) {
     try {
       const v = GM_getValue(key);
@@ -98,6 +96,7 @@
   var state = {
     currentHit: null,
     // { el, text, type }
+    frozenRect: null,
     lastSendAt: 0,
     lastClickAt: 0,
     clickLocked: false,
@@ -115,18 +114,35 @@
   function isElementAlive(el) {
     return !!(el && el.isConnected);
   }
+  function pointInRect(x, y, r, p) {
+    p = p || 0;
+    return x >= r.left - p && x <= r.right + p && y >= r.top - p && y <= r.bottom + p;
+  }
   function clamp(v, min, max) {
     return Math.max(min, Math.min(max, v));
   }
 
   // src/core/env-detector.js
-  function isMainFrame() {
-    if (window.self === window.top)
-      return true;
-    return !/\/activity\/|\/blackboard\//.test(location.href);
-  }
   function getScope() {
     return document.fullscreenElement || document;
+  }
+  function getPageWindow() {
+    if (typeof unsafeWindow !== "undefined")
+      return unsafeWindow;
+    return window;
+  }
+  function isActivityShell() {
+    if (window.self !== window.top)
+      return false;
+    var pageWin = getPageWindow();
+    if (pageWin && pageWin.__BILIACT_ENV__)
+      return true;
+    var root2 = document.documentElement;
+    if (root2 && root2.getAttribute && root2.getAttribute("data-match-theme") && root2.lang === "zh-Hans") {
+      if (document.querySelector('[data-module="eva-page"]'))
+        return true;
+    }
+    return false;
   }
 
   // src/core/danmu-parser.js
@@ -142,7 +158,8 @@
         if (!name && child.classList.contains("bili-danmaku-x-dm-emoji")) {
           name = "\u8868\u60C5";
         }
-        parts.push({ type: "emoji", value: name ? "[" + name + "]" : EMOJI_FALLBACK });
+        if (name)
+          parts.push({ type: "emoji", value: "[" + name + "]" });
       } else if (child.tagName === "SPAN" && child.classList.contains("emoji")) {
         parts.push({ type: "emoji-sm", value: child.textContent });
       }
@@ -163,9 +180,143 @@
     return { type, text };
   }
 
+  // src/core/hit-test.js
+  var _parsedCache = /* @__PURE__ */ new WeakMap();
+  function cacheParsed(el, payload) {
+    if (!el)
+      return;
+    _parsedCache.set(el, payload);
+  }
+  function getCachedParsed(el) {
+    return _parsedCache.get(el);
+  }
+  function resolveDanmuNode(node) {
+    var cur = node;
+    while (cur && cur.nodeType === Node.ELEMENT_NODE) {
+      if (cur.matches && cur.matches(DM_NODE_SELECTOR))
+        return cur;
+      cur = cur.parentElement;
+    }
+    return null;
+  }
+  function firstMatch(scope, selectors) {
+    if (!scope || !scope.querySelector)
+      return null;
+    for (var i = 0; i < selectors.length; i++) {
+      var el = scope.querySelector(selectors[i]);
+      if (el)
+        return el;
+    }
+    return null;
+  }
+  function resolveContainer(container) {
+    if (container && isElementAlive(container))
+      return container;
+    return firstMatch(getScope(), DM_CONTAINER_SELECTORS);
+  }
+  function buildSelector(el) {
+    var parts = [];
+    var cur = el;
+    for (var i = 0; i < 4 && cur && cur !== document.body; i++) {
+      var tag = cur.tagName ? cur.tagName.toLowerCase() : "node";
+      var id = cur.id ? "#" + cur.id : "";
+      var cls = cur.classList && cur.classList.length ? "." + Array.prototype.slice.call(cur.classList, 0, 2).join(".") : "";
+      parts.unshift(tag + id + cls);
+      cur = cur.parentElement;
+    }
+    return parts.join(" > ");
+  }
+  function rectText(r) {
+    return Math.round(r.left) + "," + Math.round(r.top) + "," + Math.round(r.width) + "," + Math.round(r.height);
+  }
+  function hitTestFromStack(x, y, container) {
+    var stack = document.elementsFromPoint(x, y);
+    for (var i = 0; i < stack.length; i++) {
+      var el = resolveDanmuNode(stack[i]);
+      if (!el)
+        continue;
+      if (container && !container.contains(el))
+        continue;
+      if (!isElementAlive(el))
+        continue;
+      var r = el.getBoundingClientRect();
+      if (r.width <= 4)
+        continue;
+      if (!pointInRect(x, y, r, UI.HIT_PADDING_PX))
+        continue;
+      return { el, rect: r, rectText: rectText(r), selector: buildSelector(el), source: "elementsFromPoint" };
+    }
+    return null;
+  }
+  function fallbackScan(container, x, y) {
+    var scope = container || getScope();
+    if (!scope || !scope.querySelectorAll)
+      return null;
+    var nodes = scope.querySelectorAll(DM_NODE_SELECTOR);
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (!isElementAlive(el))
+        continue;
+      var r = el.getBoundingClientRect();
+      if (r.width <= 4)
+        continue;
+      if (!pointInRect(x, y, r, UI.HIT_PADDING_PX))
+        continue;
+      return { el, rect: r, rectText: rectText(r), selector: buildSelector(el), source: "fallbackScan" };
+    }
+    return null;
+  }
+  function hitTest(x, y, container) {
+    if (x == null || y == null)
+      return null;
+    var dmContainer = resolveContainer(container);
+    if (dmContainer) {
+      var cr = dmContainer.getBoundingClientRect();
+      if (cr.width > 0 && cr.height > 0 && !pointInRect(x, y, cr, UI.HIT_PADDING_PX))
+        return null;
+    }
+    var hit = hitTestFromStack(x, y, dmContainer);
+    if (hit)
+      return hit;
+    return fallbackScan(dmContainer, x, y);
+  }
+
+  // src/ui/safe-container.js
+  var _safeContainer;
+  function ensureSafeContainer() {
+    if (!_safeContainer) {
+      _safeContainer = document.createElement("div");
+      _safeContainer.style.cssText = "position:fixed;inset:0;overflow:visible;pointer-events:none;z-index:" + (UI.Z_INDEX - 1);
+    }
+    var r = root();
+    if (_safeContainer.parentNode !== r)
+      r.appendChild(_safeContainer);
+    return _safeContainer;
+  }
+  function rescue(el) {
+    ensureSafeContainer();
+    el.style.pointerEvents = "auto";
+    _safeContainer.appendChild(el);
+  }
+
   // src/ui/debug-panel.js
   var _debugPanel;
   function initDebugPanel() {
+    if (isActivityShell()) {
+      var existingTop = document.querySelector('[data-dm1-debug="1"]');
+      if (existingTop)
+        existingTop.remove();
+      return null;
+    }
+    if (_debugPanel && _debugPanel.isConnected)
+      return _debugPanel;
+    var existing = document.querySelector('[data-dm1-debug="1"]');
+    if (existing) {
+      _debugPanel = existing;
+      _debugPanel.style.display = CONFIG.debug ? "block" : "none";
+      ensureDebugPanelParent();
+      return _debugPanel;
+    }
     _debugPanel = document.createElement("div");
     _debugPanel.dataset.dm1Debug = "1";
     _debugPanel.style.cssText = "position:fixed;left:10px;top:10px;z-index:" + UI.Z_INDEX + ";min-width:360px;max-width:52vw;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.72);color:#7CFFB2;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;white-space:pre-wrap;word-break:break-all;pointer-events:none;display:" + (CONFIG.debug ? "block" : "none");
@@ -187,6 +338,9 @@
     hitType: "",
     btnVisible: false,
     frozen: false,
+    hitSource: "",
+    hitSelector: "",
+    hitRect: "",
     currentConnected: false,
     lastSend: "",
     lastErr: "",
@@ -201,25 +355,88 @@
   function renderDebug() {
     if (!CONFIG.debug || !_debugPanel)
       return;
-    _debugPanel.textContent = "[DM+1 DEBUG v0.0.1]\nframe            : " + DBG.frame + "\ndmCount          : " + DBG.dmCount + "\nmouse            : " + DBG.mouse + "\nhitType          : " + (DBG.hitType || "(none)") + "\nhitText          : " + (DBG.hitText || "(none)") + "\nbtnVisible       : " + DBG.btnVisible + "\nfrozen           : " + DBG.frozen + "\ncurrentConnected : " + DBG.currentConnected + "\nlastSend         : " + (DBG.lastSend || "(none)") + "\nlastErr          : " + (DBG.lastErr || "(none)") + "\nenableCooldown   : " + DBG.enableSendCooldown + "\ncooldownMs       : " + DBG.cooldownMs + "\nfullscreen       : " + DBG.fullscreen;
+    _debugPanel.textContent = "[DM+1 DEBUG v0.0.1]\nframe            : " + DBG.frame + "\ndmCount          : " + DBG.dmCount + "\nmouse            : " + DBG.mouse + "\nhitType          : " + (DBG.hitType || "(none)") + "\nhitText          : " + (DBG.hitText || "(none)") + "\nhitSource        : " + (DBG.hitSource || "(none)") + "\nhitSelector      : " + (DBG.hitSelector || "(none)") + "\nhitRect          : " + (DBG.hitRect || "(none)") + "\nbtnVisible       : " + DBG.btnVisible + "\nfrozen           : " + DBG.frozen + "\ncurrentConnected : " + DBG.currentConnected + "\nlastSend         : " + (DBG.lastSend || "(none)") + "\nlastErr          : " + (DBG.lastErr || "(none)") + "\nenableCooldown   : " + DBG.enableSendCooldown + "\ncooldownMs       : " + DBG.cooldownMs + "\nfullscreen       : " + DBG.fullscreen;
   }
 
-  // src/ui/safe-container.js
-  var _safeContainer;
-  function ensureSafeContainer() {
-    if (!_safeContainer) {
-      _safeContainer = document.createElement("div");
-      _safeContainer.style.cssText = "position:fixed;inset:0;overflow:visible;pointer-events:none;z-index:" + (UI.Z_INDEX - 1);
+  // src/core/observer.js
+  function firstMatch2(scope, selectors) {
+    for (var i = 0; i < selectors.length; i++) {
+      var el = scope.querySelector(selectors[i]);
+      if (el)
+        return el;
     }
-    var r = root();
-    if (_safeContainer.parentNode !== r)
-      r.appendChild(_safeContainer);
-    return _safeContainer;
+    return null;
   }
-  function rescue(el) {
-    ensureSafeContainer();
-    el.style.pointerEvents = "auto";
-    _safeContainer.appendChild(el);
+  function isDanmuNode(node) {
+    if (node.nodeType !== Node.ELEMENT_NODE)
+      return false;
+    if (!(node instanceof HTMLElement))
+      return false;
+    if (node.matches && node.matches(DM_NODE_SELECTOR))
+      return true;
+    return false;
+  }
+  function cacheIfNeeded(el) {
+    if (!(el instanceof HTMLElement))
+      return;
+    var cached = getCachedParsed(el);
+    if (cached)
+      return;
+    var parsed = getDmText(el);
+    cacheParsed(el, parsed);
+  }
+  function scanAndCache(root2) {
+    if (!root2 || !root2.querySelectorAll)
+      return;
+    var nodes = root2.querySelectorAll(DM_NODE_SELECTOR);
+    var count = 0;
+    for (var i = 0; i < nodes.length; i++) {
+      cacheIfNeeded(nodes[i]);
+      count++;
+    }
+    var container = findDmContainer();
+    if (container && root2 === container) {
+      setDbg("dmCount", count);
+    } else if (!container) {
+      setDbg("dmCount", 0);
+    }
+  }
+  function findDmContainer() {
+    return firstMatch2(getScope(), DM_CONTAINER_SELECTORS);
+  }
+  var _mo;
+  function bindObserverTarget() {
+    if (state.dmObserverTarget && !state.dmObserverTarget.isConnected) {
+      state.dmObserverTarget = null;
+    }
+    var scope = getScope();
+    var nextTarget = findDmContainer() || scope.querySelector(".bilibili-live-player-video, #live-player") || scope;
+    if (state.dmObserverTarget === nextTarget)
+      return;
+    if (_mo)
+      _mo.disconnect();
+    state.dmObserverTarget = nextTarget;
+    _mo = new MutationObserver(function(mutations) {
+      for (var mi = 0; mi < mutations.length; mi++) {
+        var added = mutations[mi].addedNodes;
+        var removed = mutations[mi].removedNodes;
+        for (var ai = 0; ai < added.length; ai++) {
+          var node = added[ai];
+          if (isDanmuNode(node))
+            cacheIfNeeded(node);
+          if (node.nodeType === Node.ELEMENT_NODE)
+            scanAndCache(node);
+        }
+        for (var ri = 0; ri < removed.length; ri++) {
+          var rm = removed[ri];
+          if (rm.nodeType === Node.ELEMENT_NODE && rm.dataset && rm.dataset.dm1Frozen === "1") {
+            rescue(rm);
+            setDbg("currentConnected", true);
+          }
+        }
+      }
+    });
+    _mo.observe(state.dmObserverTarget, { childList: true, subtree: true });
   }
 
   // src/ui/button.js
@@ -230,25 +447,28 @@
     _plusBtn.style.cssText = "position:fixed;display:none;z-index:" + UI.Z_INDEX + ";padding:4px 10px;border:1px solid rgba(255,255,255,.82);border-radius:8px;background:rgba(0,0,0,.86);color:#fff;font-size:12px;line-height:1;cursor:pointer;user-select:none;pointer-events:auto;box-shadow:0 2px 10px rgba(0,0,0,.4);transform:translate(-50%,-50%);will-change:left,top;opacity:" + CONFIG.btnOpacity;
     return _plusBtn;
   }
-  function placeBtn(el) {
+  function placeBtn(el, rect) {
     if (!el || !isElementAlive(el))
       return;
-    var r = el.getBoundingClientRect();
+    var r = rect || el.getBoundingClientRect();
     if (r.width <= 4)
       return;
-    var x = r.left + r.width * UI.HORIZONTAL_RATIO;
+    var halfW = UI.BTN_APPROX_W / 2;
+    var x = clamp(state.mouse.x, r.left + halfW, r.right - halfW);
+    if (r.right - r.left < UI.BTN_APPROX_W)
+      x = r.left + r.width / 2;
     var y = r.top + r.height / 2;
     var m = UI.MARGIN_PX;
-    x = clamp(x, m + UI.BTN_APPROX_W / 2, innerWidth - m - UI.BTN_APPROX_W / 2);
+    x = clamp(x, m + halfW, innerWidth - m - halfW);
     y = clamp(y, m + UI.BTN_APPROX_H / 2, innerHeight - m - UI.BTN_APPROX_H / 2);
     _plusBtn.style.left = x + "px";
     _plusBtn.style.top = y + "px";
   }
-  function showBtn(el) {
+  function showBtn(el, rect) {
     var r = root();
     if (_plusBtn.parentNode !== r)
       r.appendChild(_plusBtn);
-    placeBtn(el);
+    placeBtn(el, rect);
     _plusBtn.style.display = "block";
     setDbg("btnVisible", true);
   }
@@ -256,8 +476,8 @@
     _plusBtn.style.display = "none";
     setDbg("btnVisible", false);
   }
-  function placeBtnTick(el) {
-    placeBtn(el);
+  function placeBtnTick(el, rect) {
+    placeBtn(el, rect);
   }
   function mountOverlay() {
     var r = root();
@@ -316,6 +536,30 @@
     _plusBtn.style.opacity = CONFIG.btnOpacity;
     _plusBtn.style.cursor = "";
   }
+  function parseDurationMs(value) {
+    var v = String(value || "").trim();
+    if (!v)
+      return 0;
+    if (v.endsWith("ms"))
+      return parseFloat(v) || 0;
+    if (v.endsWith("s"))
+      return (parseFloat(v) || 0) * 1e3;
+    return parseFloat(v) || 0;
+  }
+  function shouldRemoveGhostNow(el) {
+    var cs = getComputedStyle(el);
+    if (!cs)
+      return false;
+    var name = cs.animationName;
+    if (!name || name === "none")
+      return true;
+    var durations = String(cs.animationDuration || "").split(",");
+    for (var i = 0; i < durations.length; i++) {
+      if (parseDurationMs(durations[i]) > 0)
+        return false;
+    }
+    return true;
+  }
   function freeze(el) {
     if (!isElementAlive(el))
       return;
@@ -334,14 +578,19 @@
     delete el.dataset.dm1OldAnimPlay;
     delete el.dataset.dm1Frozen;
     if (wasInSafe) {
-      el.addEventListener("animationend", function() {
+      if (shouldRemoveGhostNow(el)) {
         if (el.parentNode)
           el.remove();
-      });
-      setTimeout(function() {
-        if (el.parentNode)
-          el.remove();
-      }, TIMING.GHOST_CLEANUP_MS);
+      } else {
+        el.addEventListener("animationend", function() {
+          if (el.parentNode)
+            el.remove();
+        });
+        setTimeout(function() {
+          if (el.parentNode)
+            el.remove();
+        }, TIMING.GHOST_CLEANUP_MS);
+      }
     }
     setDbg("frozen", false);
   }
@@ -354,112 +603,10 @@
       }
     }
     state.currentHit = null;
+    state.frozenRect = null;
     setDbg("hitText", "");
     setDbg("hitType", "");
     setDbg("currentConnected", false);
-  }
-
-  // src/core/observer.js
-  function firstMatch(scope, selectors) {
-    for (var i = 0; i < selectors.length; i++) {
-      var el = scope.querySelector(selectors[i]);
-      if (el)
-        return el;
-    }
-    return null;
-  }
-  function isDanmuNode(node) {
-    if (node.nodeType !== Node.ELEMENT_NODE)
-      return false;
-    if (!(node instanceof HTMLElement))
-      return false;
-    if (node.matches && node.matches(DM_NODE_SELECTOR))
-      return true;
-    return false;
-  }
-  function attachEvents(el) {
-    if (!(el instanceof HTMLElement))
-      return;
-    if (el.dataset.dm1Bound === "1")
-      return;
-    el.dataset.dm1Bound = "1";
-    el.style.pointerEvents = "auto";
-    el.addEventListener("mouseenter", function() {
-      if (state.leaveTimer) {
-        clearTimeout(state.leaveTimer);
-        state.leaveTimer = 0;
-      }
-      var payload = getDmText(el);
-      if (!payload.text)
-        return;
-      if (state.currentHit && state.currentHit.el === el)
-        return;
-      if (state.currentHit) {
-        hideBtn();
-        clearCurrentHit();
-      }
-      state.currentHit = { el, text: payload.text, type: payload.type };
-      freeze(el);
-      setDbg("hitText", payload.text);
-      setDbg("hitType", payload.type);
-      setDbg("currentConnected", true);
-      showBtn(el);
-    });
-    el.addEventListener("mouseleave", function() {
-      state.leaveTimer = setTimeout(function() {
-        state.leaveTimer = 0;
-        hideBtn();
-        clearCurrentHit();
-      }, 50);
-    });
-  }
-  function scanAndBind(root2) {
-    if (!root2 || !root2.querySelectorAll)
-      return;
-    var nodes = root2.querySelectorAll(DM_NODE_SELECTOR);
-    var boundCount = 0;
-    for (var i = 0; i < nodes.length; i++) {
-      attachEvents(nodes[i]);
-      boundCount++;
-    }
-    setDbg("dmCount", boundCount);
-  }
-  function findDmContainer() {
-    return firstMatch(getScope(), DM_CONTAINER_SELECTORS);
-  }
-  var _mo;
-  function bindObserverTarget() {
-    if (state.dmObserverTarget && !state.dmObserverTarget.isConnected) {
-      state.dmObserverTarget = null;
-    }
-    var scope = getScope();
-    var nextTarget = findDmContainer() || scope.querySelector(".bilibili-live-player-video, #live-player") || scope;
-    if (state.dmObserverTarget === nextTarget)
-      return;
-    if (_mo)
-      _mo.disconnect();
-    state.dmObserverTarget = nextTarget;
-    _mo = new MutationObserver(function(mutations) {
-      for (var mi = 0; mi < mutations.length; mi++) {
-        var added = mutations[mi].addedNodes;
-        var removed = mutations[mi].removedNodes;
-        for (var ai = 0; ai < added.length; ai++) {
-          var node = added[ai];
-          if (isDanmuNode(node))
-            attachEvents(node);
-          if (node.nodeType === Node.ELEMENT_NODE)
-            scanAndBind(node);
-        }
-        for (var ri = 0; ri < removed.length; ri++) {
-          var rm = removed[ri];
-          if (rm.nodeType === Node.ELEMENT_NODE && rm.dataset && rm.dataset.dm1Frozen === "1") {
-            rescue(rm);
-            setDbg("currentConnected", true);
-          }
-        }
-      }
-    });
-    _mo.observe(state.dmObserverTarget, { childList: true, subtree: true });
   }
 
   // src/sender/input-sender.js
@@ -474,7 +621,7 @@
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
   function findInput() {
-    return document.querySelector('textarea[placeholder*="\u5F39\u5E55"]') || document.querySelector("textarea") || document.querySelector('input[placeholder*="\u5F39\u5E55"]') || document.querySelector('input[type="text"]');
+    return document.querySelector(".chat-input") || document.querySelector("textarea.chat-input") || document.querySelector("input.chat-input");
   }
   function findSendBtn() {
     var btns = document.querySelectorAll("button");
@@ -520,8 +667,31 @@
 
   // src/index.js
   (function init() {
-    if (!isMainFrame()) {
-      console.log("[DM+1] activity iframe detected, skipping init");
+    if (isActivityShell()) {
+      console.log("[DM+1] activity shell detected, skip init in top document");
+      return;
+    }
+    function hasLocalDanmaku() {
+      return !!(findDmContainer() || getScope().querySelector(DM_NODE_SELECTOR) || getScope().querySelector(DM_CONTAINER_SELECTORS.join(",")));
+    }
+    function hasDanmakuInIframes() {
+      if (window.self !== window.top)
+        return false;
+      var frames = document.querySelectorAll("iframe");
+      for (var i = 0; i < frames.length; i++) {
+        try {
+          var d = frames[i].contentDocument;
+          if (!d)
+            continue;
+          if (d.querySelector(DM_NODE_SELECTOR) || d.querySelector(DM_CONTAINER_SELECTORS.join(",")))
+            return true;
+        } catch (e) {
+        }
+      }
+      return false;
+    }
+    if (!hasLocalDanmaku() && hasDanmakuInIframes()) {
+      console.log("[DM+1] danmaku detected inside iframe, skip init in top document");
       return;
     }
     var plusBtn = createPlusBtn();
@@ -544,7 +714,7 @@
     document.addEventListener("mousemove", function(e) {
       state.mouse.x = e.clientX;
       state.mouse.y = e.clientY;
-      setDbg("mouse", state.mouse.x + "," + state.mouse.y);
+      scheduleFrame();
     }, { capture: true, passive: true });
     document.addEventListener("fullscreenchange", function() {
       mountOverlay();
@@ -568,16 +738,40 @@
       containerWaitTimer = setInterval(function() {
         var container2 = findDmContainer();
         if (container2) {
-          scanAndBind(container2);
+          scanAndCache(container2);
           clearInterval(containerWaitTimer);
           containerWaitTimer = 0;
         }
       }, TIMING.DM_WAIT_POLL_MS);
     }
+    function resolvePayload(el) {
+      var cached = getCachedParsed(el);
+      var parsed = getDmText(el);
+      if (!cached || cached.text !== parsed.text || cached.type !== parsed.type) {
+        cacheParsed(el, parsed);
+        cached = parsed;
+      }
+      return cached;
+    }
+    function handleNoHit() {
+      if (!state.currentHit)
+        return;
+      if (state.leaveTimer)
+        return;
+      state.leaveTimer = setTimeout(function() {
+        state.leaveTimer = 0;
+        hideBtn();
+        clearCurrentHit();
+        setDbg("hitSource", "");
+        setDbg("hitSelector", "");
+        setDbg("hitRect", "");
+      }, TIMING.LEAVE_DELAY_MS);
+    }
     function tick() {
       state.rafScheduled = false;
       lastTickTime = performance.now();
       var dmContainer = findDmContainer();
+      setDbg("mouse", state.mouse.x + "," + state.mouse.y);
       if (!dmContainer) {
         state.noPlayerCount++;
         startContainerWaiter();
@@ -595,9 +789,46 @@
       ensureDebugPanelParent();
       bindObserverTarget();
       setDbg("frame", 1);
+      if (state.currentHit && state.currentHit.el && !isElementAlive(state.currentHit.el)) {
+        hideBtn();
+        clearCurrentHit();
+      }
+      var hit = hitTest(state.mouse.x, state.mouse.y, dmContainer);
+      if (!hit) {
+        handleNoHit();
+      } else {
+        if (state.leaveTimer) {
+          clearTimeout(state.leaveTimer);
+          state.leaveTimer = 0;
+        }
+        var payload = resolvePayload(hit.el);
+        if (!payload.text) {
+          handleNoHit();
+        } else {
+          if (!state.currentHit || state.currentHit.el !== hit.el) {
+            if (state.currentHit) {
+              hideBtn();
+              clearCurrentHit();
+            }
+            state.currentHit = { el: hit.el, text: payload.text, type: payload.type };
+            freeze(hit.el);
+            state.frozenRect = hit.rect;
+            showBtn(hit.el, state.frozenRect);
+          } else {
+            state.currentHit.text = payload.text;
+            state.currentHit.type = payload.type;
+          }
+          setDbg("hitText", payload.text);
+          setDbg("hitType", payload.type);
+          setDbg("hitSource", hit.source || "");
+          setDbg("hitSelector", hit.selector || "");
+          setDbg("hitRect", hit.rectText || "");
+          setDbg("currentConnected", true);
+        }
+      }
       if (state.currentHit && state.currentHit.el) {
         setDbg("currentConnected", isElementAlive(state.currentHit.el));
-        placeBtnTick(state.currentHit.el);
+        placeBtnTick(state.currentHit.el, state.frozenRect);
       }
       scheduleFrame();
     }
@@ -655,12 +886,18 @@
     setDbg("enableSendCooldown", CONFIG.enableSendCooldown);
     renderDebug();
     registerMenus();
-    var container = findDmContainer() || getScope().querySelector(PLAYER_SELECTORS) || getScope();
-    scanAndBind(container);
+    var container = findDmContainer();
+    if (container)
+      scanAndCache(container);
+    else
+      setDbg("dmCount", 0);
     startContainerWaiter();
     setInterval(function() {
-      var scope = findDmContainer() || getScope().querySelector(PLAYER_SELECTORS) || getScope();
-      scanAndBind(scope);
+      var scope = findDmContainer();
+      if (scope)
+        scanAndCache(scope);
+      else
+        setDbg("dmCount", 0);
     }, TIMING.DM_SCAN_POLL_MS);
     scheduleFrame();
     console.log("[DM+1] v0.0.1 loaded");
