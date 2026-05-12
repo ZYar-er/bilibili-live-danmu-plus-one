@@ -349,6 +349,8 @@
     enableSendCooldown: CONFIG.enableSendCooldown
   };
   function setDbg(k, v) {
+    if (DBG[k] === v)
+      return;
     DBG[k] = v;
     renderDebug();
   }
@@ -771,7 +773,8 @@
       state.rafScheduled = false;
       lastTickTime = performance.now();
       var dmContainer = findDmContainer();
-      setDbg("mouse", state.mouse.x + "," + state.mouse.y);
+      if (CONFIG.debug)
+        setDbg("mouse", state.mouse.x + "," + state.mouse.y);
       if (!dmContainer) {
         state.noPlayerCount++;
         startContainerWaiter();
