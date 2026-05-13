@@ -14,3 +14,12 @@ export function pointInRect(x, y, r, p) {
 export function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
+
+export function firstMatch(scope, selectors) {
+  if (!scope || !scope.querySelector) return null;
+  for (var i = 0; i < selectors.length; i++) {
+    var el = scope.querySelector(selectors[i]);
+    if (el) return el;
+  }
+  return null;
+}

@@ -1,5 +1,5 @@
 import { DM_NODE_SELECTOR, DM_CONTAINER_SELECTORS, UI } from '../config.js';
-import { pointInRect, isElementAlive } from '../utils.js';
+import { pointInRect, isElementAlive, firstMatch } from '../utils.js';
 import { getScope } from './env-detector.js';
 
 var _parsedCache = new WeakMap();
@@ -22,15 +22,6 @@ function resolveDanmuNode(node) {
   while (cur && cur.nodeType === Node.ELEMENT_NODE) {
     if (cur.matches && cur.matches(DM_NODE_SELECTOR)) return cur;
     cur = cur.parentElement;
-  }
-  return null;
-}
-
-function firstMatch(scope, selectors) {
-  if (!scope || !scope.querySelector) return null;
-  for (var i = 0; i < selectors.length; i++) {
-    var el = scope.querySelector(selectors[i]);
-    if (el) return el;
   }
   return null;
 }
@@ -76,7 +67,8 @@ export function hitTestFromStack(x, y, container) {
 }
 
 export function fallbackScan(container, x, y) {
-  var scope = container || getScope();
+  if (!container) return null;
+  var scope = container;
   if (!scope || !scope.querySelectorAll) return null;
   var nodes = scope.querySelectorAll(DM_NODE_SELECTOR);
   for (var i = 0; i < nodes.length; i++) {

@@ -20,6 +20,6 @@ export function getSafeContainer() {
 
 export function rescue(el) {
   ensureSafeContainer();
-  el.style.pointerEvents = 'auto';
   _safeContainer.appendChild(el);
+  el.style.pointerEvents = 'auto';
 }

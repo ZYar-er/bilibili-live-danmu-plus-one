@@ -121,6 +121,16 @@
   function clamp(v, min, max) {
     return Math.max(min, Math.min(max, v));
   }
+  function firstMatch(scope, selectors) {
+    if (!scope || !scope.querySelector)
+      return null;
+    for (var i = 0; i < selectors.length; i++) {
+      var el = scope.querySelector(selectors[i]);
+      if (el)
+        return el;
+    }
+    return null;
+  }
 
   // src/core/env-detector.js
   function getScope() {
@@ -199,16 +209,6 @@
     }
     return null;
   }
-  function firstMatch(scope, selectors) {
-    if (!scope || !scope.querySelector)
-      return null;
-    for (var i = 0; i < selectors.length; i++) {
-      var el = scope.querySelector(selectors[i]);
-      if (el)
-        return el;
-    }
-    return null;
-  }
   function resolveContainer(container) {
     if (container && isElementAlive(container))
       return container;
@@ -249,7 +249,9 @@
     return null;
   }
   function fallbackScan(container, x, y) {
-    var scope = container || getScope();
+    if (!container)
+      return null;
+    var scope = container;
     if (!scope || !scope.querySelectorAll)
       return null;
     var nodes = scope.querySelectorAll(DM_NODE_SELECTOR);
@@ -299,8 +301,8 @@
   }
   function rescue(el) {
     ensureSafeContainer();
-    el.style.pointerEvents = "auto";
     _safeContainer.appendChild(el);
+    el.style.pointerEvents = "auto";
   }
 
   // src/ui/debug-panel.js
@@ -353,6 +355,8 @@
     enableSendCooldown: CONFIG.enableSendCooldown
   };
   function setDbg(k, v) {
+    if (!CONFIG.debug)
+      return;
     if (DBG[k] === v)
       return;
     DBG[k] = v;
@@ -365,14 +369,6 @@
   }
 
   // src/core/observer.js
-  function firstMatch2(scope, selectors) {
-    for (var i = 0; i < selectors.length; i++) {
-      var el = scope.querySelector(selectors[i]);
-      if (el)
-        return el;
-    }
-    return null;
-  }
   function isDanmuNode(node) {
     if (node.nodeType !== Node.ELEMENT_NODE)
       return false;
@@ -408,15 +404,16 @@
     }
   }
   function findDmContainer() {
-    return firstMatch2(getScope(), DM_CONTAINER_SELECTORS);
+    return firstMatch(getScope(), DM_CONTAINER_SELECTORS);
   }
   var _mo;
-  function bindObserverTarget() {
+  function bindObserverTarget(container) {
     if (state.dmObserverTarget && !state.dmObserverTarget.isConnected) {
       state.dmObserverTarget = null;
     }
     var scope = getScope();
-    var nextTarget = findDmContainer() || scope.querySelector(".bilibili-live-player-video, #live-player") || scope;
+    var dmContainer = container && container.isConnected ? container : findDmContainer();
+    var nextTarget = dmContainer || scope.querySelector(".bilibili-live-player-video, #live-player") || scope;
     if (state.dmObserverTarget === nextTarget)
       return;
     if (_mo)
@@ -606,9 +603,6 @@
     var el = state.currentHit && state.currentHit.el;
     if (el && isElementAlive(el)) {
       unfreeze(el);
-      if (el.parentNode && el.parentNode.dataset && el.parentNode.dataset.dm1Safe === "1") {
-        el.remove();
-      }
     }
     state.currentHit = null;
     state.frozenRect = null;
@@ -625,17 +619,20 @@
       desc.set.call(el, value);
     else
       el.value = value;
-    el.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText", data: value }));
+    el.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText" }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
   function findInput() {
     return document.querySelector("#fullscreen-danmaku-vm .chat-input") || document.querySelector(".chat-input");
   }
   function findSendBtn() {
+    var btn = document.querySelector("#fullscreen-danmaku-vm .send-danmaku") || document.querySelector("#fullscreen-danmaku-vm button") || document.querySelector(".bl-button.send-btn") || document.querySelector("button.send-btn");
+    if (btn)
+      return btn;
     var btns = document.querySelectorAll("button");
     for (var i = 0; i < btns.length; i++) {
-      var span = btns[i].querySelector("span.txt");
-      if (span && span.textContent.trim() === "\u53D1\u9001")
+      var text = (btns[i].textContent || "").trim();
+      if (/^发送/.test(text))
         return btns[i];
     }
     return null;
@@ -688,6 +685,9 @@
       var frames = document.querySelectorAll("iframe");
       for (var i = 0; i < frames.length; i++) {
         try {
+          var src = frames[i].src || frames[i].getAttribute("src") || "";
+          if (src && src.indexOf("live.bilibili.com") === -1)
+            continue;
           var d = frames[i].contentDocument;
           if (!d)
             continue;
@@ -724,6 +724,7 @@
     var frameCount = 0;
     var containerWaitTimer = 0;
     var mouseDirty = false;
+    var lastObserverContainer = null;
     function scheduleFrame() {
       if (state.rafScheduled)
         return;
@@ -786,7 +787,10 @@
       mountOverlay();
       ensureSafeContainer();
       ensureDebugPanelParent();
-      bindObserverTarget();
+      if (dmContainer !== lastObserverContainer || !state.dmObserverTarget) {
+        bindObserverTarget(dmContainer);
+        lastObserverContainer = dmContainer;
+      }
       if (CONFIG.debug)
         setDbg("frame", ++frameCount);
       if (state.currentHit && state.currentHit.el && !isElementAlive(state.currentHit.el)) {

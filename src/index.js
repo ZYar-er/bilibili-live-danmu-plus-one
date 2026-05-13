@@ -27,6 +27,8 @@ import { sendDanmaku } from './sender/input-sender.js';
     var frames = document.querySelectorAll('iframe');
     for (var i = 0; i < frames.length; i++) {
       try {
+        var src = frames[i].src || frames[i].getAttribute('src') || '';
+        if (src && src.indexOf('live.bilibili.com') === -1) continue;
         var d = frames[i].contentDocument;
         if (!d) continue;
         if (d.querySelector(DM_NODE_SELECTOR) || d.querySelector(DM_CONTAINER_SELECTORS.join(','))) return true;
@@ -70,6 +72,7 @@ import { sendDanmaku } from './sender/input-sender.js';
   var frameCount = 0;
   var containerWaitTimer = 0;
   var mouseDirty = false;
+  var lastObserverContainer = null;
 
   function scheduleFrame() {
     if (state.rafScheduled) return;
@@ -132,7 +135,10 @@ import { sendDanmaku } from './sender/input-sender.js';
     mountOverlay();
     ensureSafeContainer();
     ensureDebugPanelParent();
-    bindObserverTarget();
+    if (dmContainer !== lastObserverContainer || !state.dmObserverTarget) {
+      bindObserverTarget(dmContainer);
+      lastObserverContainer = dmContainer;
+    }
     if (CONFIG.debug) setDbg('frame', ++frameCount);
 
     if (state.currentHit && state.currentHit.el && !isElementAlive(state.currentHit.el)) {

@@ -161,10 +161,6 @@ export function clearCurrentHit() {
   var el = state.currentHit && state.currentHit.el;
   if (el && isElementAlive(el)) {
     unfreeze(el);
-    // 从安全容器中移除
-    if (el.parentNode && el.parentNode.dataset && el.parentNode.dataset.dm1Safe === '1') {
-      el.remove();
-    }
   }
   state.currentHit = null;
   state.frozenRect = null;

@@ -1,18 +1,11 @@
 import { getScope } from './env-detector.js';
+import { firstMatch } from '../utils.js';
 import { DM_CONTAINER_SELECTORS, DM_NODE_SELECTOR } from '../config.js';
 import { state } from '../state.js';
 import { getDmText } from './danmu-parser.js';
 import { cacheParsed, getCachedParsed } from './hit-test.js';
 import { rescue } from '../ui/safe-container.js';
 import { setDbg } from '../ui/debug-panel.js';
-
-function firstMatch(scope, selectors) {
-  for (var i = 0; i < selectors.length; i++) {
-    var el = scope.querySelector(selectors[i]);
-    if (el) return el;
-  }
-  return null;
-}
 
 export function isDanmuNode(node) {
   if (node.nodeType !== Node.ELEMENT_NODE) return false;
@@ -51,12 +44,13 @@ export function findDmContainer() {
 
 var _mo;
 
-export function bindObserverTarget() {
+export function bindObserverTarget(container) {
   if (state.dmObserverTarget && !state.dmObserverTarget.isConnected) {
     state.dmObserverTarget = null;
   }
   var scope = getScope();
-  var nextTarget = findDmContainer()
+  var dmContainer = container && container.isConnected ? container : findDmContainer();
+  var nextTarget = dmContainer
     || scope.querySelector('.bilibili-live-player-video, #live-player')
     || scope;
   if (state.dmObserverTarget === nextTarget) return;

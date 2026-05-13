@@ -7,7 +7,7 @@ function setNativeValue(el, value) {
   var desc = Object.getOwnPropertyDescriptor(proto, 'value');
   if (desc && desc.set) desc.set.call(el, value);
   else el.value = value;
-  el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: value }));
+  el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText' }));
   el.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
@@ -17,10 +17,16 @@ function findInput() {
 }
 
 function findSendBtn() {
+  var btn = document.querySelector('#fullscreen-danmaku-vm .send-danmaku')
+    || document.querySelector('#fullscreen-danmaku-vm button')
+    || document.querySelector('.bl-button.send-btn')
+    || document.querySelector('button.send-btn');
+  if (btn) return btn;
+
   var btns = document.querySelectorAll('button');
   for (var i = 0; i < btns.length; i++) {
-    var span = btns[i].querySelector('span.txt');
-    if (span && span.textContent.trim() === '发送') return btns[i];
+    var text = (btns[i].textContent || '').trim();
+    if (/^发送/.test(text)) return btns[i];
   }
   return null;
 }
