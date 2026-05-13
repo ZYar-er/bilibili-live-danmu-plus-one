@@ -61,7 +61,7 @@ B站弹幕DOM特征：
   - 动画未结束 → `animationend` 监听自清理 + 30s 超时兜底
 
 ### 按钮定位与防闪烁
-- 按钮 `position:fixed`，X 跟随 `state.mouse.x`，clamp 到弹幕矩形 `[r.left+半宽, r.right-半宽]`
+- 按钮 `position:fixed`，命中时按 `state.mouse.x` 计算位置，clamp 到弹幕矩形 `[r.left+半宽, r.right-半宽]`
 - 弹幕太窄放不下按钮时回退到弹幕中心
 - Y 始终为弹幕矩形垂直中心
 - viewport 边距 clamp 防止按钮溢出屏幕
@@ -119,7 +119,6 @@ mousemove -> mouseDirty=true + scheduleFrame()
       -> resolveDanmuNode
       -> resolvePayload (WeakMap cache, or parse on demand)
       -> freeze + showBtn
-    -> placeBtnTick (跟随鼠标X)
 
 MutationObserver
   -> addedNodes -> parse + cache
@@ -128,9 +127,9 @@ MutationObserver
 
 ### 主循环启停策略
 - `mousemove` 唤醒循环（`scheduleFrame()`）
-- `tick()` 末尾仅在 `mouseDirty || state.currentHit` 时 reschedule
+- `tick()` 末尾仅在 `mouseDirty` 时 reschedule
 - 无命中 + 鼠标静止 → 循环停止，零 CPU 占用
-- 有活跃命中 → 循环保持，处理弹幕滚动/消失/按钮跟随
+- 有活跃命中但鼠标静止 → 循环停止，按钮保持在命中时位置
 - `bindObserverTarget` 仅在容器变化或无绑定时触发，避免每帧重查
 
 ### 全局状态字段（state.js）
