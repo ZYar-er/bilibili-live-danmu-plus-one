@@ -22,8 +22,9 @@
 ## 安装
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展
-2. 打开脚本文件 `bilibili-live-danmu-plus-one.user.js` 的 Raw 链接 → Tampermonkey 弹出安装页面
-3. 点击「安装」即可
+2. 推荐打开 [Latest Release 资产](https://github.com/ZYar-er/bilibili-live-danmu-plus-one/releases/latest/download/bilibili-live-danmu-plus-one.user.js) 直接下载 `bilibili-live-danmu-plus-one.user.js`
+3. 或者直接打开 [Raw 链接](https://github.com/ZYar-er/bilibili-live-danmu-plus-one/raw/master/bilibili-live-danmu-plus-one.user.js) → Tampermonkey 弹出安装页面
+4. 点击「安装」即可
 
 ## 使用
 
@@ -106,6 +107,21 @@ npm run build
 1. 更新版本号（可选）：在 [package.json](package.json) 与 userscript 头部保持一致
 2. 运行构建：`npm run build`
 3. 将最新构建产物发布到仓库（或替换已安装脚本）
+4. 发布说明见 [RELEASE.md](RELEASE.md)
+
+## 自动发布 Release
+
+GitHub Actions 已配置为：
+
+1. 推送 `v*` 标签时自动构建
+2. 生成并发布 GitHub Release
+3. 附带 [RELEASE.md](RELEASE.md) 作为 Release 说明
+
+如果你要手动发布：
+
+1. 先执行 `npm run build`
+2. 再创建并推送一个 `v0.0.1` 形式的标签
+3. GitHub Actions 会自动完成 Release 发布
 
 ## 贡献
 
