@@ -165,9 +165,6 @@
           parts.push({ type: "text", value: t });
       } else if (child.tagName === "IMG") {
         var name = child.dataset.name || child.getAttribute("alt") || "";
-        if (!name && child.classList.contains("bili-danmaku-x-dm-emoji")) {
-          name = "\u8868\u60C5";
-        }
         if (name)
           parts.push({ type: "emoji", value: "[" + name + "]" });
       } else if (child.tagName === "SPAN" && child.classList.contains("emoji")) {

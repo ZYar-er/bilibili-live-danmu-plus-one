@@ -19,8 +19,6 @@ export const UI = {
   OPACITY_OPTIONS: [0.3, 0.5, 0.7, 0.8, 0.95],
 };
 
-export const EMOJI_FALLBACK = '[表情]';
-
 export const DM_CONTAINER_SELECTORS = [
   '#live-player .web-player-danmaku .danmaku-item-container',
   '#live-player .danmaku-item-container',

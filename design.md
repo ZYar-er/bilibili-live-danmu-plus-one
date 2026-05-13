@@ -20,10 +20,10 @@ src/
     debug-panel.js    # 固定定位调试面板，全屏时迁移到 fullscreenElement
     safe-container.js # 冻结弹幕安全容器（position:fixed;pointer-events:none;z-index高）
   sender/
-    input-sender.js   # 发送：查找输入框（.chat-input）、查找发送按钮、冷却管理、setNativeValue
+    input-sender.js   # 发送：优先全屏输入框、查找发送按钮（多策略/宽松匹配）、冷却管理、setNativeValue
   config.js           # 常量（TIMING/UI/DM_SELECTORS）+ 持久化（GM_getValue→localStorage）
   state.js            # 全局状态：{currentHit,frozenRect,lastSendAt,lastClickAt,clickLocked,mouse,rafScheduled,...}
-  utils.js            # 工具：root(),isElementAlive(),clamp(),pointInRect()
+  utils.js            # 工具：root(),isElementAlive(),clamp(),pointInRect(),firstMatch()
   index.js            # 入口：组装模块、主循环（按需启停）、Tampermonkey菜单
 build.js              # esbuild 打包：注入==UserScript==头（含@match blanc*），输出IIFE格式
 bilibili-live-danmu-plus-one.user.js  # 构建产物
@@ -55,7 +55,7 @@ B站弹幕DOM特征：
 ### ghost模式（弹幕被B站JS清理后保留）
 - MutationObserver removedNodes回调中检测`el.dataset.dm1Frozen==='1'`
 - 移到dmSafeContainer（position:fixed;inset:0;overflow:visible;pointer-events:none）
-- 保持pointer-events:auto使弹幕仍可交互
+- 先 append 再设置 `pointer-events:auto`，避免原容器短暂可点击
 - 鼠标离开后unfreeze→`shouldRemoveGhostNow()`检查：
   - 动画已结束（`animationName==='none'` 或 `duration===0`）→ 立即 remove
   - 动画未结束 → `animationend` 监听自清理 + 30s 超时兜底
@@ -97,6 +97,7 @@ B站弹幕DOM特征：
 - `isActivityShell()` 检测顶层活动页 → 跳过初始化（顶层无弹幕）
 - `@match *://live.bilibili.com/blanc*` → 脚本注入 iframe 内部正常运行
 - iframe 内弹幕 DOM 结构、选择器、CSS 完全一致，无需额外适配
+- 顶层 iframe 预检仅处理 `live.bilibili.com` 域，减少跨域异常
 
 ### 实测结论（来自 dev/inspector）
 
@@ -130,6 +131,7 @@ MutationObserver
 - `tick()` 末尾仅在 `mouseDirty || state.currentHit` 时 reschedule
 - 无命中 + 鼠标静止 → 循环停止，零 CPU 占用
 - 有活跃命中 → 循环保持，处理弹幕滚动/消失/按钮跟随
+- `bindObserverTarget` 仅在容器变化或无绑定时触发，避免每帧重查
 
 ### 全局状态字段（state.js）
 
@@ -177,22 +179,22 @@ MutationObserver
 
 1. `elementsFromPoint(x, y)` 获取层级栈
 2. 从栈内向上找最近的弹幕节点（`DM_NODE_SELECTOR`）
-3. 若未命中，执行 `fallbackScan` 遍历当前容器内弹幕
+3. 若未命中，执行 `fallbackScan` 遍历当前容器内弹幕（容器缺失则直接返回）
 4. 命中后返回 `{ el, rect, source }`
 
 容器范围职责：
 
 - `hit-test.js` 内部获取容器与 `rect`，并先做范围短路
-- 若容器为 `null`，自动降级为全局命中（不依赖容器）
+- 若容器为 `null`，不做全局降级扫描，避免全局 querySelectorAll
 
 ## Debug 面板字段规范
 
-字段由 `debug-panel.js` 维护，`setDbg(k,v)` 为统一入口。
+字段由 `debug-panel.js` 维护，`setDbg(k,v)` 为统一入口，非 debug 模式直接跳过。
 
 - `frame`: number，主循环计数
 - `dmCount`: number，扫描到的弹幕数量
 - `mouse`: string，`x,y`（仅 debug）
-- `hitType`: string，`text/emoji/mixed/unknown`
+- `hitType`: string，`text/emoji/emoji-sm/mixed/unknown`
 - `hitText`: string，当前命中文本
 - `btnVisible`: boolean，按钮可见状态
 - `frozen`: boolean，是否处于冻结状态

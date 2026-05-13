@@ -1,5 +1,3 @@
-import { EMOJI_FALLBACK } from '../config.js';
-
 // 遍历直接子节点，区分 TEXT / IMG(alt) / SPAN.emoji
 export function getDmText(el) {
   var parts = [];
@@ -9,9 +7,6 @@ export function getDmText(el) {
       if (t) parts.push({ type: 'text', value: t });
     } else if (child.tagName === 'IMG') {
       var name = child.dataset.name || child.getAttribute('alt') || '';
-      if (!name && child.classList.contains('bili-danmaku-x-dm-emoji')) {
-        name = '表情';
-      }
       // Skip fallback text for special emoji until we add proper support.
       if (name) parts.push({ type: 'emoji', value: '[' + name + ']' });
     } else if (child.tagName === 'SPAN' && child.classList.contains('emoji')) {
