@@ -5,7 +5,7 @@ import { getScope, isActivityShell } from './core/env-detector.js';
 import { scanAndCache, findDmContainer, bindObserverTarget } from './core/observer.js';
 import { hitTest, cacheParsed, getCachedParsed } from './core/hit-test.js';
 import { getDmText } from './core/danmu-parser.js';
-import { createPlusBtn, showBtn, hideBtn, placeBtnTick, mountOverlay, setupButtonEvents, clearCurrentHit, freeze } from './ui/button.js';
+import { createPlusBtn, showBtn, hideBtn, mountOverlay, setupButtonEvents, clearCurrentHit, freeze } from './ui/button.js';
 import { initDebugPanel, ensureDebugPanelParent, setDbg, renderDebug } from './ui/debug-panel.js';
 import { ensureSafeContainer } from './ui/safe-container.js';
 import { sendDanmaku } from './sender/input-sender.js';
@@ -49,12 +49,16 @@ import { sendDanmaku } from './sender/input-sender.js';
   // 注入 sendDanmaku 到按钮 click 事件
   setupButtonEvents().injectSender(sendDanmaku);
 
-  // ========= mousemove（仅 debug 用）=========
+  // ========= mousemove =========
+  var dmContainerCache = null;
   document.addEventListener('mousemove', function (e) {
     state.mouse.x = e.clientX;
     state.mouse.y = e.clientY;
     mouseDirty = true;
-    scheduleFrame();
+    // 仅当有弹幕容器或活跃命中时才唤醒循环，避免在页面空白区域浪费帧
+    if (state.currentHit || dmContainerCache) {
+      scheduleFrame();
+    }
   }, { capture: true, passive: true });
 
   // ========= 全屏 =========
@@ -85,9 +89,11 @@ import { sendDanmaku } from './sender/input-sender.js';
     containerWaitTimer = setInterval(function () {
       var container = findDmContainer();
       if (container) {
+        dmContainerCache = container;
         scanAndCache(container);
         clearInterval(containerWaitTimer);
         containerWaitTimer = 0;
+        scheduleFrame();
       }
     }, TIMING.DM_WAIT_POLL_MS);
   }
@@ -120,6 +126,8 @@ import { sendDanmaku } from './sender/input-sender.js';
     lastTickTime = performance.now();
     var dmContainer = findDmContainer();
     if (CONFIG.debug) setDbg('mouse', state.mouse.x + ',' + state.mouse.y);
+
+    dmContainerCache = dmContainer;
 
     if (!dmContainer) {
       state.noPlayerCount++;
@@ -178,14 +186,12 @@ import { sendDanmaku } from './sender/input-sender.js';
       }
     }
 
-    // 按钮跟随（鼠标静止时 rect 不变，仍需调用以处理弹幕滚动）
     if (state.currentHit && state.currentHit.el) {
       setDbg('currentConnected', isElementAlive(state.currentHit.el));
-      placeBtnTick(state.currentHit.el, state.frozenRect);
     }
 
-    // 鼠标移动或有活跃命中时继续循环，否则停止等待事件唤醒
-    if (mouseDirty || state.currentHit) {
+    // 仅鼠标移动时继续循环，静止即停
+    if (mouseDirty) {
       scheduleFrame();
     }
   }

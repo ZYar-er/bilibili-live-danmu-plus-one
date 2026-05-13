@@ -476,9 +476,6 @@
     _plusBtn.style.display = "none";
     setDbg("btnVisible", false);
   }
-  function placeBtnTick(el, rect) {
-    placeBtn(el, rect);
-  }
   function mountOverlay() {
     var r = root();
     if (_plusBtn && _plusBtn.parentNode !== r)
@@ -703,11 +700,14 @@
     initDebugPanel();
     ensureSafeContainer();
     setupButtonEvents().injectSender(sendDanmaku);
+    var dmContainerCache = null;
     document.addEventListener("mousemove", function(e) {
       state.mouse.x = e.clientX;
       state.mouse.y = e.clientY;
       mouseDirty = true;
-      scheduleFrame();
+      if (state.currentHit || dmContainerCache) {
+        scheduleFrame();
+      }
     }, { capture: true, passive: true });
     document.addEventListener("fullscreenchange", function() {
       mountOverlay();
@@ -734,9 +734,11 @@
       containerWaitTimer = setInterval(function() {
         var container2 = findDmContainer();
         if (container2) {
+          dmContainerCache = container2;
           scanAndCache(container2);
           clearInterval(containerWaitTimer);
           containerWaitTimer = 0;
+          scheduleFrame();
         }
       }, TIMING.DM_WAIT_POLL_MS);
     }
@@ -769,6 +771,7 @@
       var dmContainer = findDmContainer();
       if (CONFIG.debug)
         setDbg("mouse", state.mouse.x + "," + state.mouse.y);
+      dmContainerCache = dmContainer;
       if (!dmContainer) {
         state.noPlayerCount++;
         startContainerWaiter();
@@ -832,9 +835,8 @@
       }
       if (state.currentHit && state.currentHit.el) {
         setDbg("currentConnected", isElementAlive(state.currentHit.el));
-        placeBtnTick(state.currentHit.el, state.frozenRect);
       }
-      if (mouseDirty || state.currentHit) {
+      if (mouseDirty) {
         scheduleFrame();
       }
     }

@@ -1,7 +1,6 @@
 import { UI, CONFIG, TIMING } from '../config.js';
 import { state } from '../state.js';
 import { root, isElementAlive, clamp } from '../utils.js';
-import { getScope } from '../core/env-detector.js';
 import { setDbg } from './debug-panel.js';
 import { rescue, getSafeContainer } from './safe-container.js';
 
@@ -45,10 +44,6 @@ export function showBtn(el, rect) {
 export function hideBtn() {
   _plusBtn.style.display = 'none';
   setDbg('btnVisible', false);
-}
-
-export function placeBtnTick(el, rect) {
-  placeBtn(el, rect);
 }
 
 export function mountOverlay() {
