@@ -1,16 +1,15 @@
-name: Release
+name: CI / Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
 
 jobs:
-  build-and-release:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,6 +25,42 @@ jobs:
 
       - name: Build userscript
         run: npm run build
+
+      - name: Verify output
+        run: |
+          test -f bilibili-live-danmu-plus-one.user.js || (echo "MISSING: output file not found" && exit 1)
+          head -5 bilibili-live-danmu-plus-one.user.js
+
+      - name: Upload artifact
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: userscript
+          path: bilibili-live-danmu-plus-one.user.js
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build userscript (release)
+        run: npm run build
+        env:
+          VERSION: ${{ github.ref_name }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

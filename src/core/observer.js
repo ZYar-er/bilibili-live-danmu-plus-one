@@ -3,7 +3,7 @@ import { firstMatch } from '../utils.js';
 import { DM_CONTAINER_SELECTORS, DM_NODE_SELECTOR } from '../config.js';
 import { state } from '../state.js';
 import { getDmText } from './danmu-parser.js';
-import { cacheParsed, getCachedParsed } from './hit-test.js';
+import { cacheParsed, getCachedParsed } from './danmu-cache.js';
 import { rescue } from '../ui/safe-container.js';
 import { setDbg } from '../ui/debug-panel.js';
 

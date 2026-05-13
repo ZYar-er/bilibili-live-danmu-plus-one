@@ -1,11 +1,16 @@
 const esbuild = require('esbuild');
 const fs = require('fs');
+const path = require('path');
+
+const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf-8'));
+var version = process.env.VERSION || pkg.version;
+if (version.startsWith('v')) version = version.slice(1);
 
 const userscriptBanner = `// ==UserScript==
 // @name         B站直播弹幕 +1
 // @name:zh-CN   B站直播弹幕 +1
 // @namespace    https://github.com/ZYar-er/bilibili-live-danmu-plus-one
-// @version      0.0.1
+// @version      ${version}
 // @description  鼠标悬停弹幕即可一键发送同款弹幕+1，支持文字/emoji/表情图片，可配置发送间隔
 // @description:zh-CN  鼠标悬停弹幕即可一键发送同款弹幕+1，支持文字/emoji/表情图片，可配置发送间隔
 // @author       ZYar-er
@@ -42,5 +47,5 @@ esbuild.build({
   banner: { js: userscriptBanner },
   minify: false,
 }).then(function () {
-  console.log('Build complete: bilibili-live-danmu-plus-one.user.js');
+  console.log('Build complete: bilibili-live-danmu-plus-one.user.js (v' + version + ')');
 }).catch(function () { process.exit(1); });

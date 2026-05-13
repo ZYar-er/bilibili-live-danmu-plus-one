@@ -11,18 +11,33 @@ function setNativeValue(el, value) {
   el.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
+// 精准 → 宽泛 降级链
 function findInput() {
-  return document.querySelector('#fullscreen-danmaku-vm .chat-input')
-    || document.querySelector('.chat-input');
+  // 1. 侧栏：容器限定 textarea（始终可见，优先）
+  var el = document.querySelector('.chat-input-ctnr textarea.chat-input');
+  if (el) return el;
+  // 2. 全屏：容器限定 input
+  el = document.querySelector('#fullscreen-danmaku-vm input.chat-input');
+  if (el) return el;
+  // 3. 宽泛兜底
+  return document.querySelector('.chat-input');
 }
 
 function findSendBtn() {
-  var btn = document.querySelector('#fullscreen-danmaku-vm .send-danmaku')
-    || document.querySelector('#fullscreen-danmaku-vm button')
-    || document.querySelector('.bl-button.send-btn')
-    || document.querySelector('button.send-btn');
+  var btn;
+  // 1. 侧栏：容器限定发送按钮（最精确）
+  btn = document.querySelector('.chat-input-ctnr button.send-btn');
   if (btn) return btn;
-
+  // 2. 侧栏：类名限定
+  btn = document.querySelector('.bl-button.send-btn');
+  if (btn) return btn;
+  // 3. 全屏：容器限定
+  btn = document.querySelector('#fullscreen-danmaku-vm .send-danmaku');
+  if (btn) return btn;
+  // 4. 全屏：容器内任意 button
+  btn = document.querySelector('#fullscreen-danmaku-vm button');
+  if (btn) return btn;
+  // 5. 宽泛扫描：文本匹配
   var btns = document.querySelectorAll('button');
   for (var i = 0; i < btns.length; i++) {
     var text = (btns[i].textContent || '').trim();

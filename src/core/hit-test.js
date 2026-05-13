@@ -2,20 +2,7 @@ import { DM_NODE_SELECTOR, DM_CONTAINER_SELECTORS, UI } from '../config.js';
 import { pointInRect, isElementAlive, firstMatch } from '../utils.js';
 import { getScope } from './env-detector.js';
 
-var _parsedCache = new WeakMap();
-
-export function cacheParsed(el, payload) {
-  if (!el) return;
-  _parsedCache.set(el, payload);
-}
-
-export function getCachedParsed(el) {
-  return _parsedCache.get(el);
-}
-
-export function clearParsedCache() {
-  _parsedCache = new WeakMap();
-}
+export { cacheParsed, getCachedParsed, clearParsedCache } from './danmu-cache.js';
 
 function resolveDanmuNode(node) {
   var cur = node;

@@ -187,7 +187,7 @@
     return { type, text };
   }
 
-  // src/core/hit-test.js
+  // src/core/danmu-cache.js
   var _parsedCache = /* @__PURE__ */ new WeakMap();
   function cacheParsed(el, payload) {
     if (!el)
@@ -196,88 +196,6 @@
   }
   function getCachedParsed(el) {
     return _parsedCache.get(el);
-  }
-  function resolveDanmuNode(node) {
-    var cur = node;
-    while (cur && cur.nodeType === Node.ELEMENT_NODE) {
-      if (cur.matches && cur.matches(DM_NODE_SELECTOR))
-        return cur;
-      cur = cur.parentElement;
-    }
-    return null;
-  }
-  function resolveContainer(container) {
-    if (container && isElementAlive(container))
-      return container;
-    return firstMatch(getScope(), DM_CONTAINER_SELECTORS);
-  }
-  function buildSelector(el) {
-    var parts = [];
-    var cur = el;
-    for (var i = 0; i < 4 && cur && cur !== document.body; i++) {
-      var tag = cur.tagName ? cur.tagName.toLowerCase() : "node";
-      var id = cur.id ? "#" + cur.id : "";
-      var cls = cur.classList && cur.classList.length ? "." + Array.prototype.slice.call(cur.classList, 0, 2).join(".") : "";
-      parts.unshift(tag + id + cls);
-      cur = cur.parentElement;
-    }
-    return parts.join(" > ");
-  }
-  function rectText(r) {
-    return Math.round(r.left) + "," + Math.round(r.top) + "," + Math.round(r.width) + "," + Math.round(r.height);
-  }
-  function hitTestFromStack(x, y, container) {
-    var stack = document.elementsFromPoint(x, y);
-    for (var i = 0; i < stack.length; i++) {
-      var el = resolveDanmuNode(stack[i]);
-      if (!el)
-        continue;
-      if (container && !container.contains(el))
-        continue;
-      if (!isElementAlive(el))
-        continue;
-      var r = el.getBoundingClientRect();
-      if (r.width <= 4)
-        continue;
-      if (!pointInRect(x, y, r, UI.HIT_PADDING_PX))
-        continue;
-      return { el, rect: r, rectText: rectText(r), selector: buildSelector(el), source: "elementsFromPoint" };
-    }
-    return null;
-  }
-  function fallbackScan(container, x, y) {
-    if (!container)
-      return null;
-    var scope = container;
-    if (!scope || !scope.querySelectorAll)
-      return null;
-    var nodes = scope.querySelectorAll(DM_NODE_SELECTOR);
-    for (var i = 0; i < nodes.length; i++) {
-      var el = nodes[i];
-      if (!isElementAlive(el))
-        continue;
-      var r = el.getBoundingClientRect();
-      if (r.width <= 4)
-        continue;
-      if (!pointInRect(x, y, r, UI.HIT_PADDING_PX))
-        continue;
-      return { el, rect: r, rectText: rectText(r), selector: buildSelector(el), source: "fallbackScan" };
-    }
-    return null;
-  }
-  function hitTest(x, y, container) {
-    if (x == null || y == null)
-      return null;
-    var dmContainer = resolveContainer(container);
-    if (dmContainer) {
-      var cr = dmContainer.getBoundingClientRect();
-      if (cr.width > 0 && cr.height > 0 && !pointInRect(x, y, cr, UI.HIT_PADDING_PX))
-        return null;
-    }
-    var hit = hitTestFromStack(x, y, dmContainer);
-    if (hit)
-      return hit;
-    return fallbackScan(dmContainer, x, y);
   }
 
   // src/ui/safe-container.js
@@ -439,6 +357,163 @@
     _mo.observe(state.dmObserverTarget, { childList: true, subtree: true });
   }
 
+  // src/core/hit-test.js
+  function resolveDanmuNode(node) {
+    var cur = node;
+    while (cur && cur.nodeType === Node.ELEMENT_NODE) {
+      if (cur.matches && cur.matches(DM_NODE_SELECTOR))
+        return cur;
+      cur = cur.parentElement;
+    }
+    return null;
+  }
+  function resolveContainer(container) {
+    if (container && isElementAlive(container))
+      return container;
+    return firstMatch(getScope(), DM_CONTAINER_SELECTORS);
+  }
+  function buildSelector(el) {
+    var parts = [];
+    var cur = el;
+    for (var i = 0; i < 4 && cur && cur !== document.body; i++) {
+      var tag = cur.tagName ? cur.tagName.toLowerCase() : "node";
+      var id = cur.id ? "#" + cur.id : "";
+      var cls = cur.classList && cur.classList.length ? "." + Array.prototype.slice.call(cur.classList, 0, 2).join(".") : "";
+      parts.unshift(tag + id + cls);
+      cur = cur.parentElement;
+    }
+    return parts.join(" > ");
+  }
+  function rectText(r) {
+    return Math.round(r.left) + "," + Math.round(r.top) + "," + Math.round(r.width) + "," + Math.round(r.height);
+  }
+  function hitTestFromStack(x, y, container) {
+    var stack = document.elementsFromPoint(x, y);
+    for (var i = 0; i < stack.length; i++) {
+      var el = resolveDanmuNode(stack[i]);
+      if (!el)
+        continue;
+      if (container && !container.contains(el))
+        continue;
+      if (!isElementAlive(el))
+        continue;
+      var r = el.getBoundingClientRect();
+      if (r.width <= 4)
+        continue;
+      if (!pointInRect(x, y, r, UI.HIT_PADDING_PX))
+        continue;
+      return { el, rect: r, rectText: rectText(r), selector: buildSelector(el), source: "elementsFromPoint" };
+    }
+    return null;
+  }
+  function fallbackScan(container, x, y) {
+    if (!container)
+      return null;
+    var scope = container;
+    if (!scope || !scope.querySelectorAll)
+      return null;
+    var nodes = scope.querySelectorAll(DM_NODE_SELECTOR);
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (!isElementAlive(el))
+        continue;
+      var r = el.getBoundingClientRect();
+      if (r.width <= 4)
+        continue;
+      if (!pointInRect(x, y, r, UI.HIT_PADDING_PX))
+        continue;
+      return { el, rect: r, rectText: rectText(r), selector: buildSelector(el), source: "fallbackScan" };
+    }
+    return null;
+  }
+  function hitTest(x, y, container) {
+    if (x == null || y == null)
+      return null;
+    var dmContainer = resolveContainer(container);
+    if (dmContainer) {
+      var cr = dmContainer.getBoundingClientRect();
+      if (cr.width > 0 && cr.height > 0 && !pointInRect(x, y, cr, UI.HIT_PADDING_PX))
+        return null;
+    }
+    var hit = hitTestFromStack(x, y, dmContainer);
+    if (hit)
+      return hit;
+    return fallbackScan(dmContainer, x, y);
+  }
+
+  // src/core/freeze.js
+  function parseDurationMs(value) {
+    var v = String(value || "").trim();
+    if (!v)
+      return 0;
+    if (v.endsWith("ms"))
+      return parseFloat(v) || 0;
+    if (v.endsWith("s"))
+      return (parseFloat(v) || 0) * 1e3;
+    return parseFloat(v) || 0;
+  }
+  function shouldRemoveGhostNow(el) {
+    var cs = getComputedStyle(el);
+    if (!cs)
+      return false;
+    var name = cs.animationName;
+    if (!name || name === "none")
+      return true;
+    var durations = String(cs.animationDuration || "").split(",");
+    for (var i = 0; i < durations.length; i++) {
+      if (parseDurationMs(durations[i]) > 0)
+        return false;
+    }
+    return true;
+  }
+  function freeze(el) {
+    if (!isElementAlive(el))
+      return;
+    if (el.dataset.dm1Frozen === "1")
+      return;
+    el.dataset.dm1Frozen = "1";
+    el.dataset.dm1OldAnimPlay = el.style.animationPlayState || "";
+    el.style.setProperty("animation-play-state", "paused", "important");
+    setDbg("frozen", true);
+  }
+  function unfreeze(el) {
+    if (!el || el.dataset.dm1Frozen !== "1")
+      return;
+    var safeContainer = getSafeContainer();
+    var wasInSafe = el.parentNode && safeContainer && el.parentNode === safeContainer;
+    el.style.animationPlayState = el.dataset.dm1OldAnimPlay || "";
+    delete el.dataset.dm1OldAnimPlay;
+    delete el.dataset.dm1Frozen;
+    if (wasInSafe) {
+      if (shouldRemoveGhostNow(el)) {
+        if (el.parentNode)
+          el.remove();
+      } else if (el.dataset.dm1RescueCleaned !== "1") {
+        el.dataset.dm1RescueCleaned = "1";
+        el.addEventListener("animationend", function() {
+          if (el.parentNode)
+            el.remove();
+        });
+        setTimeout(function() {
+          if (el.parentNode)
+            el.remove();
+        }, TIMING.GHOST_CLEANUP_MS);
+      }
+    }
+    setDbg("frozen", false);
+  }
+  function clearCurrentHit() {
+    var el = state.currentHit && state.currentHit.el;
+    if (el && isElementAlive(el)) {
+      unfreeze(el);
+    }
+    state.currentHit = null;
+    state.frozenRect = null;
+    setDbg("hitText", "");
+    setDbg("hitType", "");
+    setDbg("currentConnected", false);
+  }
+
   // src/ui/button.js
   var _plusBtn;
   function createPlusBtn() {
@@ -533,77 +608,6 @@
     _plusBtn.style.opacity = CONFIG.btnOpacity;
     _plusBtn.style.cursor = "";
   }
-  function parseDurationMs(value) {
-    var v = String(value || "").trim();
-    if (!v)
-      return 0;
-    if (v.endsWith("ms"))
-      return parseFloat(v) || 0;
-    if (v.endsWith("s"))
-      return (parseFloat(v) || 0) * 1e3;
-    return parseFloat(v) || 0;
-  }
-  function shouldRemoveGhostNow(el) {
-    var cs = getComputedStyle(el);
-    if (!cs)
-      return false;
-    var name = cs.animationName;
-    if (!name || name === "none")
-      return true;
-    var durations = String(cs.animationDuration || "").split(",");
-    for (var i = 0; i < durations.length; i++) {
-      if (parseDurationMs(durations[i]) > 0)
-        return false;
-    }
-    return true;
-  }
-  function freeze(el) {
-    if (!isElementAlive(el))
-      return;
-    if (el.dataset.dm1Frozen === "1")
-      return;
-    el.dataset.dm1Frozen = "1";
-    el.dataset.dm1OldAnimPlay = el.style.animationPlayState || "";
-    el.style.setProperty("animation-play-state", "paused", "important");
-    setDbg("frozen", true);
-  }
-  function unfreeze(el) {
-    if (!el || el.dataset.dm1Frozen !== "1")
-      return;
-    var safeContainer = getSafeContainer();
-    var wasInSafe = el.parentNode && safeContainer && el.parentNode === safeContainer;
-    el.style.animationPlayState = el.dataset.dm1OldAnimPlay || "";
-    delete el.dataset.dm1OldAnimPlay;
-    delete el.dataset.dm1Frozen;
-    if (wasInSafe) {
-      if (shouldRemoveGhostNow(el)) {
-        if (el.parentNode)
-          el.remove();
-      } else if (el.dataset.dm1RescueCleaned !== "1") {
-        el.dataset.dm1RescueCleaned = "1";
-        el.addEventListener("animationend", function() {
-          if (el.parentNode)
-            el.remove();
-        });
-        setTimeout(function() {
-          if (el.parentNode)
-            el.remove();
-        }, TIMING.GHOST_CLEANUP_MS);
-      }
-    }
-    setDbg("frozen", false);
-  }
-  function clearCurrentHit() {
-    var el = state.currentHit && state.currentHit.el;
-    if (el && isElementAlive(el)) {
-      unfreeze(el);
-    }
-    state.currentHit = null;
-    state.frozenRect = null;
-    setDbg("hitText", "");
-    setDbg("hitType", "");
-    setDbg("currentConnected", false);
-  }
 
   // src/sender/input-sender.js
   function setNativeValue(el, value) {
@@ -617,10 +621,26 @@
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
   function findInput() {
-    return document.querySelector("#fullscreen-danmaku-vm .chat-input") || document.querySelector(".chat-input");
+    var el = document.querySelector(".chat-input-ctnr textarea.chat-input");
+    if (el)
+      return el;
+    el = document.querySelector("#fullscreen-danmaku-vm input.chat-input");
+    if (el)
+      return el;
+    return document.querySelector(".chat-input");
   }
   function findSendBtn() {
-    var btn = document.querySelector("#fullscreen-danmaku-vm .send-danmaku") || document.querySelector("#fullscreen-danmaku-vm button") || document.querySelector(".bl-button.send-btn") || document.querySelector("button.send-btn");
+    var btn;
+    btn = document.querySelector(".chat-input-ctnr button.send-btn");
+    if (btn)
+      return btn;
+    btn = document.querySelector(".bl-button.send-btn");
+    if (btn)
+      return btn;
+    btn = document.querySelector("#fullscreen-danmaku-vm .send-danmaku");
+    if (btn)
+      return btn;
+    btn = document.querySelector("#fullscreen-danmaku-vm button");
     if (btn)
       return btn;
     var btns = document.querySelectorAll("button");
@@ -662,6 +682,57 @@
     }
     setDbg("lastSend", finalText);
     return true;
+  }
+
+  // src/menus.js
+  function registerMenus(plusBtn) {
+    try {
+      GM_registerMenuCommand("\u5207\u6362\u53D1\u9001\u51B7\u5374", function() {
+        CONFIG.enableSendCooldown = !CONFIG.enableSendCooldown;
+        storageSet("enableSendCooldown", CONFIG.enableSendCooldown);
+        setDbg("enableSendCooldown", CONFIG.enableSendCooldown);
+      });
+      CONFIG.cooldownMsOptions.forEach(function(ms) {
+        var label = ms === 0 ? "\u65E0\u95F4\u9694" : (ms / 1e3).toFixed(1) + "s";
+        GM_registerMenuCommand("\u53D1\u9001\u95F4\u9694 \u2192 " + label, function() {
+          CONFIG.cooldownMs = ms;
+          storageSet("cooldownMs", ms);
+          setDbg("cooldownMs", ms);
+          console.log("[DM+1] \u53D1\u9001\u95F4\u9694:", label);
+        });
+      });
+      GM_registerMenuCommand("\u5207\u6362\u6309\u94AE\u900F\u660E\u5EA6", function() {
+        var opts = UI.OPACITY_OPTIONS;
+        var idx = opts.indexOf(CONFIG.btnOpacity);
+        CONFIG.btnOpacity = opts[(idx + 1) % opts.length];
+        storageSet("btnOpacity", CONFIG.btnOpacity);
+        plusBtn.style.opacity = CONFIG.btnOpacity;
+      });
+      GM_registerMenuCommand("\u5207\u6362\u8C03\u8BD5\u9762\u677F", function() {
+        CONFIG.debug = !CONFIG.debug;
+        storageSet("debug", CONFIG.debug);
+        var dp = document.querySelector("[data-dm1-debug]");
+        if (dp)
+          dp.style.display = CONFIG.debug ? "block" : "none";
+        if (CONFIG.debug) {
+          renderDebug();
+        }
+      });
+      GM_registerMenuCommand("\u91CD\u7F6E\u6240\u6709\u8BBE\u7F6E", function() {
+        ["enableSendCooldown", "cooldownMs", "debug", "btnOpacity"].forEach(function(k) {
+          try {
+            GM_deleteValue && GM_deleteValue(k);
+          } catch (e) {
+          }
+          try {
+            localStorage.removeItem("dm1_" + k);
+          } catch (e) {
+          }
+        });
+        location.reload();
+      });
+    } catch (e) {
+    }
   }
 
   // src/index.js
@@ -840,60 +911,11 @@
         scheduleFrame();
       }
     }
-    function registerMenus() {
-      try {
-        GM_registerMenuCommand("\u5207\u6362\u53D1\u9001\u51B7\u5374", function() {
-          CONFIG.enableSendCooldown = !CONFIG.enableSendCooldown;
-          storageSet("enableSendCooldown", CONFIG.enableSendCooldown);
-          setDbg("enableSendCooldown", CONFIG.enableSendCooldown);
-        });
-        CONFIG.cooldownMsOptions.forEach(function(ms) {
-          var label = ms === 0 ? "\u65E0\u95F4\u9694" : (ms / 1e3).toFixed(1) + "s";
-          GM_registerMenuCommand("\u53D1\u9001\u95F4\u9694 \u2192 " + label, function() {
-            CONFIG.cooldownMs = ms;
-            storageSet("cooldownMs", ms);
-            setDbg("cooldownMs", ms);
-            console.log("[DM+1] \u53D1\u9001\u95F4\u9694:", label);
-          });
-        });
-        GM_registerMenuCommand("\u5207\u6362\u6309\u94AE\u900F\u660E\u5EA6", function() {
-          var opts = UI.OPACITY_OPTIONS;
-          var idx = opts.indexOf(CONFIG.btnOpacity);
-          CONFIG.btnOpacity = opts[(idx + 1) % opts.length];
-          storageSet("btnOpacity", CONFIG.btnOpacity);
-          plusBtn.style.opacity = CONFIG.btnOpacity;
-        });
-        GM_registerMenuCommand("\u5207\u6362\u8C03\u8BD5\u9762\u677F", function() {
-          CONFIG.debug = !CONFIG.debug;
-          storageSet("debug", CONFIG.debug);
-          var dp = document.querySelector("[data-dm1-debug]");
-          if (dp)
-            dp.style.display = CONFIG.debug ? "block" : "none";
-          if (CONFIG.debug) {
-            renderDebug();
-          }
-        });
-        GM_registerMenuCommand("\u91CD\u7F6E\u6240\u6709\u8BBE\u7F6E", function() {
-          ["enableSendCooldown", "cooldownMs", "debug", "btnOpacity"].forEach(function(k) {
-            try {
-              GM_deleteValue && GM_deleteValue(k);
-            } catch (e) {
-            }
-            try {
-              localStorage.removeItem("dm1_" + k);
-            } catch (e) {
-            }
-          });
-          location.reload();
-        });
-      } catch (e) {
-      }
-    }
     setDbg("fullscreen", !!document.fullscreenElement);
     setDbg("cooldownMs", CONFIG.cooldownMs);
     setDbg("enableSendCooldown", CONFIG.enableSendCooldown);
     renderDebug();
-    registerMenus();
+    registerMenus(plusBtn);
     var container = findDmContainer();
     if (container)
       scanAndCache(container);

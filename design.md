@@ -11,23 +11,34 @@ Tampermonkey 油猴脚本。在 B站直播间悬停弹幕时显示 `+1` 按钮�
 ```
 src/
   core/
-    observer.js       # MutationObserver：监听弹幕注入/移除，事件绑定
-    hit-test.js       # 鼠标命中检测（elementsFromPoint + rect fallback）
+    observer.js       # MutationObserver：监听弹幕注入/移除，新增解析缓存，冻结节点救援
+    hit-test.js       # 鼠标命中检测（elementsFromPoint + rect fallback），职责单一不含缓存
+    danmu-cache.js    # 【新】WeakMap 弹幕解析缓存（独立于命中检测，observer 直接依赖）
     danmu-parser.js   # 弹幕内容提取（文字/表情IMG/span.emoji）
+    freeze.js         # 【新】弹幕生命周期：freeze/unfreeze/clearCurrentHit/ghost 清理
     env-detector.js   # 环境检测：全屏scope、活动页外壳（isActivityShell）
   ui/
-    button.js         # +1 按钮：创建、定位（跟随鼠标X，clamp到弹幕矩形）、显示/隐藏、freeze/unfreeze
+    button.js         # +1 按钮 UI：创建、定位、显示/隐藏、事件绑定（不再包含 freeze 逻辑）
     debug-panel.js    # 固定定位调试面板，全屏时迁移到 fullscreenElement
-    safe-container.js # 冻结弹幕安全容器（position:fixed;pointer-events:none;z-index高）
+    safe-container.js # 冻结弹幕安全容器 + rescue
   sender/
-    input-sender.js   # 发送：优先全屏输入框、查找发送按钮（多策略/宽松匹配）、冷却管理、setNativeValue
+    input-sender.js   # 发送：优先全屏输入框、查找发送按钮（多策略/宽松匹配）、冷却管理
+  menus.js            # 【新】Tampermonkey 菜单注册（从 index.js 抽出）
   config.js           # 常量（TIMING/UI/DM_SELECTORS）+ 持久化（GM_getValue→localStorage）
-  state.js            # 全局状态：{currentHit,frozenRect,lastSendAt,lastClickAt,clickLocked,mouse,rafScheduled,...}
+  state.js            # 全局状态：{currentHit,frozenRect,lastSendAt,...}
   utils.js            # 工具：root(),isElementAlive(),clamp(),pointInRect(),firstMatch()
-  index.js            # 入口：组装模块、主循环（按需启停）、Tampermonkey菜单
+  index.js            # 入口：组装模块、主循环（按需启停）
 build.js              # esbuild 打包：注入==UserScript==头（含@match blanc*），输出IIFE格式
 bilibili-live-danmu-plus-one.user.js  # 构建产物
 ```
+
+### 模块依赖原则
+
+- `observer.js` 依赖 `danmu-cache.js`（缓存），不再依赖 `hit-test.js`
+- `hit-test.js` 为纯命中检测，缓存逻辑已移出
+- `button.js` 为纯按钮 UI，freeze/ghost 生命周期已移入 `freeze.js`
+- `index.js` 直接依赖 `danmu-cache.js` 和 `freeze.js`，不通过 button/hit-test 间接获取
+- `menus.js` 接受 `plusBtn` DOM 元素作为参数，不访问其他模块内部状态
 
 ## 弹幕命中与缓存策略
 
@@ -170,9 +181,9 @@ MutationObserver
 
 职责边界：
 
-- 负责“从鼠标坐标找到弹幕节点”的逻辑
+- 负责”从鼠标坐标找到弹幕节点”的逻辑
 - 只返回命中结果，不直接操作 UI/发送逻辑
-- 维护命中缓存（WeakMap）和临时统计
+- 弹幕内容缓存已移入独立模块 `danmu-cache.js`（`observer.js` 直接依赖，不再绕经 hit-test）
 
 核心流程：
 
@@ -213,6 +224,7 @@ MutationObserver
 
 - **主循环按需启停**：鼠标静止且无命中时 rAF 循环完全停止，等待 mousemove 唤醒
 - **`mouseDirty` 标记**：mousemove 置 true，tick 内 hitTest 后置 false，避免鼠标静止时重复执行 `elementsFromPoint`
+- **`dmContainerCache` 守卫**：mousemove 仅在容器存在或活跃命中时唤醒循环，页面空白区域移动鼠标零开销
 - `mousemove` 使用 rAF 合并，1 帧仅处理最后一次坐标
 - 弹幕解析结果只存 WeakMap，不做全局数组缓存
 - `setDbg` 调用仅在 `CONFIG.debug` 为 true 时执行，非 debug 模式零开销

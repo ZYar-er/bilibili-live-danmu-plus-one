@@ -1,14 +1,17 @@
-import { TIMING, CONFIG, UI, storageSet, PLAYER_SELECTORS, DM_NODE_SELECTOR, DM_CONTAINER_SELECTORS } from './config.js';
+import { TIMING, CONFIG, DM_NODE_SELECTOR, DM_CONTAINER_SELECTORS } from './config.js';
 import { state } from './state.js';
 import { isElementAlive } from './utils.js';
 import { getScope, isActivityShell } from './core/env-detector.js';
 import { scanAndCache, findDmContainer, bindObserverTarget } from './core/observer.js';
-import { hitTest, cacheParsed, getCachedParsed } from './core/hit-test.js';
+import { hitTest } from './core/hit-test.js';
+import { cacheParsed, getCachedParsed } from './core/danmu-cache.js';
 import { getDmText } from './core/danmu-parser.js';
-import { createPlusBtn, showBtn, hideBtn, mountOverlay, setupButtonEvents, clearCurrentHit, freeze } from './ui/button.js';
+import { createPlusBtn, showBtn, hideBtn, mountOverlay, setupButtonEvents } from './ui/button.js';
+import { freeze, clearCurrentHit } from './core/freeze.js';
 import { initDebugPanel, ensureDebugPanelParent, setDbg, renderDebug } from './ui/debug-panel.js';
 import { ensureSafeContainer } from './ui/safe-container.js';
 import { sendDanmaku } from './sender/input-sender.js';
+import { registerMenus } from './menus.js';
 
 (function init() {
   if (isActivityShell()) {
@@ -196,57 +199,12 @@ import { sendDanmaku } from './sender/input-sender.js';
     }
   }
 
-  // ========= Tampermonkey 菜单 =========
-  function registerMenus() {
-    try {
-      GM_registerMenuCommand('切换发送冷却', function () {
-        CONFIG.enableSendCooldown = !CONFIG.enableSendCooldown;
-        storageSet('enableSendCooldown', CONFIG.enableSendCooldown);
-        setDbg('enableSendCooldown', CONFIG.enableSendCooldown);
-      });
-
-      CONFIG.cooldownMsOptions.forEach(function (ms) {
-        var label = ms === 0 ? '无间隔' : (ms / 1000).toFixed(1) + 's';
-        GM_registerMenuCommand('发送间隔 → ' + label, function () {
-          CONFIG.cooldownMs = ms;
-          storageSet('cooldownMs', ms);
-          setDbg('cooldownMs', ms);
-          console.log('[DM+1] 发送间隔:', label);
-        });
-      });
-
-      GM_registerMenuCommand('切换按钮透明度', function () {
-        var opts = UI.OPACITY_OPTIONS;
-        var idx = opts.indexOf(CONFIG.btnOpacity);
-        CONFIG.btnOpacity = opts[(idx + 1) % opts.length];
-        storageSet('btnOpacity', CONFIG.btnOpacity);
-        plusBtn.style.opacity = CONFIG.btnOpacity;
-      });
-
-      GM_registerMenuCommand('切换调试面板', function () {
-        CONFIG.debug = !CONFIG.debug;
-        storageSet('debug', CONFIG.debug);
-        var dp = document.querySelector('[data-dm1-debug]');
-        if (dp) dp.style.display = CONFIG.debug ? 'block' : 'none';
-        if (CONFIG.debug) { renderDebug(); }
-      });
-
-      GM_registerMenuCommand('重置所有设置', function () {
-        ['enableSendCooldown', 'cooldownMs', 'debug', 'btnOpacity'].forEach(function (k) {
-          try { GM_deleteValue && GM_deleteValue(k); } catch (e) {}
-          try { localStorage.removeItem('dm1_' + k); } catch (e) {}
-        });
-        location.reload();
-      });
-    } catch (e) {}
-  }
-
   // ========= 初始化 =========
   setDbg('fullscreen', !!document.fullscreenElement);
   setDbg('cooldownMs', CONFIG.cooldownMs);
   setDbg('enableSendCooldown', CONFIG.enableSendCooldown);
   renderDebug();
-  registerMenus();
+  registerMenus(plusBtn);
 
   // 初始扫描
   var container = findDmContainer();
