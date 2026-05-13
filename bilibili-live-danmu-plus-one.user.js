@@ -2,7 +2,7 @@
 // @name         B站直播弹幕 +1
 // @name:zh-CN   B站直播弹幕 +1
 // @namespace    https://github.com/ZYar-er/bilibili-live-danmu-plus-one
-// @version      0.0.1
+// @version      0.0.2
 // @description  鼠标悬停弹幕即可一键发送同款弹幕+1，支持文字/emoji/表情图片，可配置发送间隔
 // @description:zh-CN  鼠标悬停弹幕即可一键发送同款弹幕+1，支持文字/emoji/表情图片，可配置发送间隔
 // @author       ZYar-er
