@@ -1,8 +1,9 @@
 # Release: B站直播弹幕 +1
 
-## 简介
+## 更改
 
-这是一个 Tampermonkey 脚本，用于在 B 站直播间悬停弹幕时显示 `+1` 按钮，点击即可复读弹幕内容。
+特殊表情适配（resource_id 映射）  
+bilibili-emoji目录下
 
 ## 安装方法
 

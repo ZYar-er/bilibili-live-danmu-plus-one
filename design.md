@@ -11,20 +11,18 @@ Tampermonkey 油猴脚本。在 B站直播间悬停弹幕时显示 `+1` 按钮�
 ```
 src/
   core/
-    observer.js       # MutationObserver：监听弹幕注入/移除，新增解析缓存，冻结节点救援
-    hit-test.js       # 鼠标命中检测（elementsFromPoint + rect fallback），职责单一不含缓存
-    danmu-cache.js    # 【新】WeakMap 弹幕解析缓存（独立于命中检测，observer 直接依赖）
+    observer.js       # MutationObserver：监听弹幕注入/移除，解析缓存，冻结节点救援
+    hit-test.js       # 鼠标命中检测（elementsFromPoint + rect fallback）
     danmu-parser.js   # 弹幕内容提取（文字/表情IMG/span.emoji）
-    freeze.js         # 【新】弹幕生命周期：freeze/unfreeze/clearCurrentHit/ghost 清理
     env-detector.js   # 环境检测：全屏scope、活动页外壳（isActivityShell）
   ui/
-    button.js         # +1 按钮 UI：创建、定位、显示/隐藏、事件绑定（不再包含 freeze 逻辑）
+    button.js         # +1 按钮 UI：创建、定位、显示/隐藏、事件绑定
     debug-panel.js    # 固定定位调试面板，全屏时迁移到 fullscreenElement
     safe-container.js # 冻结弹幕安全容器 + rescue
   sender/
     input-sender.js   # 发送：优先全屏输入框、查找发送按钮（多策略/宽松匹配）、冷却管理
-  menus.js            # 【新】Tampermonkey 菜单注册（从 index.js 抽出）
   config.js           # 常量（TIMING/UI/DM_SELECTORS）+ 持久化（GM_getValue→localStorage）
+  emoji-map.js        # 表情 resource_id → name 映射（由 bilibili-emoji/bilibili-emoji.csv 生成）
   state.js            # 全局状态：{currentHit,frozenRect,lastSendAt,...}
   utils.js            # 工具：root(),isElementAlive(),clamp(),pointInRect(),firstMatch()
   index.js            # 入口：组装模块、主循环（按需启停）
@@ -88,8 +86,8 @@ B站弹幕DOM特征：
 - SPAN.emoji → textContent
 - 空文本弹幕 → 返回{type:'unknown',text:''}，不显示按钮
 
-补充：当前版本可正常支持标准 emoji（Unicode 字符）。
-补充：B站特殊 emoji 的机制为输入框发送形如 `[XX]` 的文本后由前端解析为图片并插入文本中。由于需要先收集完整的特殊 emoji id 列表，先搁置适配；当前会跳过无名称表情，不再附加 `[表情]` 占位。
+补充：当前版本可正常支持标准 emoji（Unicode 字符）与 B 站特殊表情。
+补充：通过 `bilibili-emoji/bilibili-emoji.csv` 生成 `src/emoji-map.js`，从 IMG 的 `resource_id` 或 `src` 提取表情名并发送为 `[名称]`。
 
 ### 选择器策略
 - DM_NODE_SELECTOR = `.bili-danmaku-x-dm[role="comment"]`
@@ -183,7 +181,7 @@ MutationObserver
 
 - 负责”从鼠标坐标找到弹幕节点”的逻辑
 - 只返回命中结果，不直接操作 UI/发送逻辑
-- 弹幕内容缓存已移入独立模块 `danmu-cache.js`（`observer.js` 直接依赖，不再绕经 hit-test）
+- 弹幕内容缓存由 `observer.js` 预解析并写入 WeakMap，命中时做一致性校验
 
 核心流程：
 

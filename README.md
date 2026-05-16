@@ -10,7 +10,7 @@
 ## 功能
 
 - **悬停即用** — 鼠标划过任意弹幕，弹出 `+1` 按钮，点击即发
-- **Emoji 支持** — 兼容文字 emoji、常规表情（带名称的表情图）；特殊 emoji 暂不适配
+- **Emoji 支持** — 兼容文字 emoji、常规表情与特殊表情（resource_id 映射）
 - **图文混合** — 正确处理 "哈哈哈[大笑]笑死" 等混合弹幕内容
 - **弹幕冻结恢复** — 悬停时弹幕冻结，移开后从冻结位置继续滚动直至自然消失
 - **发送冷却** — 可配置间隔防刷屏（默认 2s），也可关闭
@@ -80,9 +80,7 @@ fullscreen       : false      # 是否全屏
 
 ## 已知问题
 
-### 特殊 emoji 暂不适配
-
-B站特殊 emoji 需要完整的 id 列表才能准确映射，目前会跳过无名称表情（不再附加 `[表情]` 占位）。
+如遇到新表情未映射，请更新 `bilibili-emoji/bilibili-emoji.csv` 后重新生成映射文件。
 
 ## 开发
 
@@ -98,6 +96,12 @@ B站特殊 emoji 需要完整的 id 列表才能准确映射，目前会跳过�
 ```
 npm install
 npm run build
+```
+
+更新表情映射：
+
+```
+node -e "const fs=require('fs');const path=require('path');const csv=fs.readFileSync(path.join('bilibili-emoji','bilibili-emoji.csv'),'utf8');const lines=csv.trim().split(/\\r?\\n/).slice(1);const map={};for(const line of lines){const parts=line.split(',');if(parts.length<3) continue;const name=parts[0].trim();const id=parts[2].trim();if(name&&id) map[id]=name;}const header='// Auto-generated from bilibili-emoji/bilibili-emoji.csv\\n// Do not edit manually.\\n\\nexport const EMOJI_ID_TO_NAME = ';const body=JSON.stringify(map,null,2);fs.writeFileSync(path.join('src','emoji-map.js'),header+body+';\\n');"
 ```
 
 构建产物输出到 [bilibili-live-danmu-plus-one.user.js](bilibili-live-danmu-plus-one.user.js)。

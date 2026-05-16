@@ -1,3 +1,26 @@
+import { EMOJI_ID_TO_NAME } from '../emoji-map.js';
+
+function resolveEmojiNameFromImg(img) {
+  var name = img.dataset.name || img.getAttribute('alt') || '';
+  if (name) return name;
+
+  var rid = img.dataset.resourceId
+    || img.getAttribute('data-resource-id')
+    || img.getAttribute('data-resourceId')
+    || img.dataset.id
+    || img.getAttribute('data-id')
+    || '';
+
+  if (!rid) {
+    var src = img.getAttribute('src') || img.src || '';
+    var match = src.match(/bfs\/live\/([0-9a-f]+)/i);
+    if (match) rid = match[1];
+  }
+
+  if (rid && EMOJI_ID_TO_NAME[rid]) return EMOJI_ID_TO_NAME[rid];
+  return '';
+}
+
 // 遍历直接子节点，区分 TEXT / IMG(alt) / SPAN.emoji
 export function getDmText(el) {
   var parts = [];
@@ -6,8 +29,7 @@ export function getDmText(el) {
       var t = child.textContent.replace(/\s+/g, ' ').trim();
       if (t) parts.push({ type: 'text', value: t });
     } else if (child.tagName === 'IMG') {
-      var name = child.dataset.name || child.getAttribute('alt') || '';
-      // Skip fallback text for special emoji until we add proper support.
+      var name = resolveEmojiNameFromImg(child);
       if (name) parts.push({ type: 'emoji', value: '[' + name + ']' });
     } else if (child.tagName === 'SPAN' && child.classList.contains('emoji')) {
       parts.push({ type: 'emoji-sm', value: child.textContent });

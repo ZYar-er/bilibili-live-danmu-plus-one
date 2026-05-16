@@ -155,7 +155,108 @@
     return false;
   }
 
+  // src/emoji-map.js
+  var EMOJI_ID_TO_NAME = {
+    "4428c84e694fbf4e0ef6c06e958d9352c3582740": "dog",
+    "7dd2ef03e13998575e4d8a803c6e12909f94e72b": "\u82B1",
+    "08f735d950a0fba267dda140673c9ab2edf6410d": "\u5999",
+    "650c3e22c06edcbca9756365754d38952fc019c3": "\u54C7",
+    "1daaa5d284dafaa16c51409447da851ff1ec557f": "\u7231",
+    "b159f90431148a973824f596288e7ad6a8db014b": "\u624B\u673A",
+    "4255ce6ed5d15b60311728a803d03dd9a24366b2": "\u6487\u5634",
+    "69312e99a00d1db2de34ef2db9220c5686643a3f": "\u59D4\u5C48",
+    "a7feb260bb5b15f97d7119b444fc698e82516b9f": "\u6293\u72C2",
+    "4e029593562283f00d39b99e0557878c4199c71d": "\u6BD4\u5FC3",
+    "2dd666d3651bafe8683acf770b7f4163a5f49809": "\u8D5E",
+    "8624fd172037573c8600b2597e3731ef0e5ea983": "\u6ED1\u7A3D",
+    "ffb53c252b085d042173379ac724694ce3196194": "\u5403\u74DC",
+    "c5436c6806c32b28d471bb23d42f0f8f164a187a": "\u7B11\u54ED",
+    "e6073c6849f735ae6cb7af3a20ff7dcec962b4c5": "\u6342\u8138",
+    "b51824125d09923a4ca064f0c0b49fc97d3fab79": "\u559D\u5F69",
+    "e2ba16f947a23179cdc00420b71cc1d627d8ae25": "\u5077\u7B11",
+    "e2589d086df0db8a7b5ca2b1273c02d31d4433d4": "\u5927\u7B11",
+    "9c75761c5b6e1ff59b29577deb8e6ad996b86bd7": "\u60CA\u559C",
+    "b5b44f099059a1bafb2c2722cfe9a6f62c1dc531": "\u50B2\u5A07",
+    "492b10d03545b7863919033db7d1ae3ef342df2f": "\u75BC",
+    "c6bed64ffb78c97c93a83fbd22f6fdf951400f31": "\u5413",
+    "a4df45c035b0ca0c58f162b5fb5058cf273d0d09": "\u9634\u9669",
+    "bc26f29f62340091737c82109b8b91f32e6675ad": "\u60CA\u8BB6",
+    "84c92239591e5ece0f986c75a39050a5c61c803c": "\u751F\u75C5",
+    "b6226219384befa5da1d437cb2ff4ba06c303844": "\u5618",
+    "5935e6a4103d024955f749d428311f39e120a58a": "\u5978\u7B11",
+    "204413d3cf330e122230dcc99d29056f2a60e6f2": "\u56E7",
+    "a2ad0cc7e390a303f6d243821479452d31902a5f": "\u6342\u81382",
+    "bb8e95fa54512ffea07023ea4f2abee4a163e7a0": "\u51FA\u7A8D",
+    "2b6b4cc33be42c3257dc1f6ef3a39d666b6b4b1a": "\u5410\u4E86\u554A",
+    "f4ed20a70d0cb85a22c0c59c628aedfe30566b37": "\u9F3B\u5B50",
+    "84fe12ecde5d3875e1090d83ac9027cb7d7fba9f": "\u8C03\u76AE",
+    "98fd92c6115b0d305f544b209c78ec322e4bb4ff": "\u9178",
+    "b804118a1bdb8f3bec67d9b108d5ade6e3aa93a9": "\u51B7",
+    "86268b09e35fbe4215815a28ef3cf25ec71c124f": "OK",
+    "f605dd8229fa0115e57d2f16cb019da28545452b": "\u5FAE\u7B11",
+    "05ef7849e7313e9c32887df922613a7c1ad27f12": "\u85CF\u72D0",
+    "8b99266ea7b9e86cf9d25c3d1151d80c5ba5c9a1": "\u9F87\u7259",
+    "17435e60dcc28ce306762103a2a646046ff10b0a": "\u9632\u62A4",
+    "a91a27f83c38b5576f4cd08d4e11a2880de78918": "\u7B11",
+    "8d436de0c3701d87e4ca9c1be01c01b199ac198e": "\u4E00\u822C",
+    "c409425ba1ad2c6534f0df7de350ba83a9c949e5": "\u5ACC\u5F03",
+    "4781a77be9c8f0d4658274eb4e3012c47a159f23": "\u65E0\u8BED",
+    "6e496946725cd66e7ff1b53021bf1cc0fc240288": "\u54C8\u6B20",
+    "8e88e6a137463703e96d4f27629f878efa323456": "\u53EF\u601C",
+    "bea1f0497888f3e9056d3ce14ba452885a485c02": "\u6B6A\u5634\u7B11",
+    "10662d9c0d6ddb3203ecf50e77788b959d4d1928": "\u4EB2\u4EB2",
+    "a0c456b6d9e3187399327828a9783901323bfdb5": "\u95EE\u53F7",
+    "57dee478868ed9f1ce3cf25a36bc50bde489c404": "\u6CE2\u5409",
+    "0d5123cddf389302df6f605087189fd10919dc3c": "OH",
+    "f408e2af700adcc2baeca15510ef620bed8d4c43": "\u518D\u89C1",
+    "7fa907ae85fa6327a0466e123aee1ac32d7c85f7": "\u767D\u773C",
+    "d581d0bc30c8f9712b46ec02303579840c72c42d": "\u9F13\u638C",
+    "816402551e6ce30d08b37a917f76dea8851fe529": "\u5927\u54ED",
+    "179c7e2d232cd74f30b672e12fc728f8f62be9ec": "\u5446",
+    "b00e2e02904096377061ec5f93bf0dd3321f1964": "\u6D41\u6C57",
+    "2c69dad2e5c0f72f01b92746bc9d148aee1993b2": "\u751F\u6C14",
+    "fbc3c8bc4152a65bbf4a9fd5a5d27710fbff2119": "\u52A0\u6CB9",
+    "d8ce9b05c0e40cec61a15ba1979c8517edd270bf": "\u5BB3\u7F9E",
+    "a51af0d7d9e60ce24f139c468a3853f9ba9bb184": "\u864E\u5E74",
+    "f547cc853cf43e70f1e39095d9b3b5ac1bf70a8d": "doge2",
+    "b6e8131897a9a718ee280f2510bfa92f1d84429b": "\u91D1\u94B1\u8C79",
+    "fd35718ac5a278fd05fe5287ebd41de40a59259d": "\u74DC\u5B50",
+    "5e01c237642c8b662a69e21b8e0fbe6e7dbc2aa1": "\u58A8\u955C",
+    "5776481e380648c0fb3d4ad6173475f69f1ce149": "\u96BE\u8FC7",
+    "abddb0b621b389fc8c2322b1cfcf122d8936ba91": "\u62B1\u62B1",
+    "4f2155b108047d60c1fa9dccdc4d7abba18379a0": "\u8DEA\u4E86",
+    "1e0a2baf088a34d56e2cc226b2de36a5f8d6c926": "\u644A\u624B",
+    "6df760280b17a6cbac8c1874d357298f982ba4cf": "\u70ED",
+    "0a1ab3f0f2f2e29de35c702ac1ecfec7f90e325d": "\u4E09\u661F\u5806",
+    "98f842994035505c728e32e32045d649e371ecd6": "\u9F20",
+    "23ae12d3a71b9d7a22c8773343969fcbb94b20d0": "\u6C64\u5706",
+    "29533893115c4609a4af336f49060ea13173ca78": "\u6CFC\u6C34",
+    "5d86d55ba9a2f99856b523d8311cf75cfdcccdbc": "\u9B3C\u9B42",
+    "607f74ccf5eec7d2b17d91b9bb36be61a5dd196b": "\u4E0D\u884C",
+    "3b2fedf09b0ac79679b5a47f5eb3e8a38e702387": "\u54CD\u6307",
+    "5e61223561203c50340b4c9b41ba7e4b05e48ae2": "\u725B",
+    "241b13adb4933e38b7ea6f5204e0648725e76fbf": "\u4FDD\u4F51",
+    "3f170894dd08827ee293afcb5a3d2b60aecdb5b1": "\u62B1\u62F3",
+    "d1ba5f4c54332a21ed2ca0dcecaedd2add587839": "\u7ED9\u529B",
+    "eb2d84ba623e2335a48f73fb5bef87bcf53c1239": "\u8036"
+  };
+
   // src/core/danmu-parser.js
+  function resolveEmojiNameFromImg(img) {
+    var name = img.dataset.name || img.getAttribute("alt") || "";
+    if (name)
+      return name;
+    var rid = img.dataset.resourceId || img.getAttribute("data-resource-id") || img.getAttribute("data-resourceId") || img.dataset.id || img.getAttribute("data-id") || "";
+    if (!rid) {
+      var src = img.getAttribute("src") || img.src || "";
+      var match = src.match(/bfs\/live\/([0-9a-f]+)/i);
+      if (match)
+        rid = match[1];
+    }
+    if (rid && EMOJI_ID_TO_NAME[rid])
+      return EMOJI_ID_TO_NAME[rid];
+    return "";
+  }
   function getDmText(el) {
     var parts = [];
     el.childNodes.forEach(function(child) {
@@ -164,7 +265,7 @@
         if (t)
           parts.push({ type: "text", value: t });
       } else if (child.tagName === "IMG") {
-        var name = child.dataset.name || child.getAttribute("alt") || "";
+        var name = resolveEmojiNameFromImg(child);
         if (name)
           parts.push({ type: "emoji", value: "[" + name + "]" });
       } else if (child.tagName === "SPAN" && child.classList.contains("emoji")) {
