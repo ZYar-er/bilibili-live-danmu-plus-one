@@ -53,7 +53,7 @@ B站弹幕DOM特征：
 1. `mousemove` 设置 `mouseDirty` 标记 + 唤醒主循环
 2. `tick()` 内仅在 `mouseDirty=true` 时执行 `hitTest(elementsFromPoint)`，完成后置 false
 3. MutationObserver 用于新增节点解析缓存与冻结节点救援
-4. 300ms 扫描兜底补缓存（仅补未缓存）
+4. 300ms 扫描兜底补缓存 + 缓存失效检测（textContent 比对，仅重解析变更节点）
 5. 命中后 freeze，按钮跟随鼠标 X（clamp 到弹幕矩形内）
 6. 鼠标静止且无命中时循环停止，等待下次 mousemove 唤醒
 7. 活动页外壳（`isActivityShell()`）跳过初始化，iframe（`/blanc/*`）内正常初始化
@@ -174,9 +174,9 @@ MutationObserver
 
 ### 缓存失效策略
 
-- MO 新增节点时解析并缓存
-- 命中时做一次轻量校验：若 `parseText(el)` 与缓存不一致，更新缓存
-- 扫描兜底只补“未缓存”的节点，避免全量解析
+- MO 新增节点时解析并缓存（`cacheParsed` 同时存储 `_raw: el.textContent`）
+- 命中时做轻量校验：若 `el.textContent === cached._raw` 直接返回缓存；不一致才重新解析比对
+- 300ms 扫描遍历全部节点：未缓存则解析；已缓存但 `textContent !== cached._raw` 则重解析并更新（`_raw` 始终保持同步）
 
 ## 命中检测模块（core/hit-test.js）
 

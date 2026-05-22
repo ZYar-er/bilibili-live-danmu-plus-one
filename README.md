@@ -5,7 +5,7 @@
 
 鼠标悬停 B站直播弹幕，一键发送同款弹幕 +1。
 
-> **v0.0.1** — 大部分代码由 AI 辅助生成（Claude Code 使用 deepseek-v4 与 mimo-v2.5 模型，另含 GitHub Copilot），人工审核与调优。
+> **v0.0.4** — 大部分代码由 AI 辅助生成（Claude Code），人工审核与调优。
 
 ## 功能
 
@@ -22,8 +22,8 @@
 ## 安装
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展
-2. 推荐打开 [Latest Release 资产](https://github.com/ZYar-er/bilibili-live-danmu-plus-one/releases/latest/download/bilibili-live-danmu-plus-one.user.js) 直接下载 `bilibili-live-danmu-plus-one.user.js`
-3. 或者直接打开 [Raw 链接](https://github.com/ZYar-er/bilibili-live-danmu-plus-one/raw/master/bilibili-live-danmu-plus-one.user.js) → Tampermonkey 弹出安装页面
+2. 打开 [Latest Release](https://github.com/ZYar-er/bilibili-live-danmu-plus-one/releases/latest) 下载 `bilibili-live-danmu-plus-one.user.js`
+3. Tampermonkey 会自动弹出安装页面
 4. 点击「安装」即可
 
 ## 使用
@@ -53,7 +53,7 @@
 开启调试面板后，左上角会显示：
 
 ```
-[DM+1 DEBUG v0.0.1]
+[DM+1 DEBUG v0.0.4]
 frame            : 1234       # rAF 帧计数
 dmCount          : 35         # 当前页面的弹幕 DOM 数量
 mouse            : 640,480    # 鼠标坐标
@@ -124,7 +124,7 @@ GitHub Actions 已配置为：
 如果你要手动发布：
 
 1. 先执行 `npm run build`
-2. 再创建并推送一个 `v0.0.1` 形式的标签
+2. 再创建并推送一个 `v0.0.4` 形式的标签
 3. GitHub Actions 会自动完成 Release 发布
 
 ## 贡献

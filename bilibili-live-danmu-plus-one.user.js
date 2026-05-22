@@ -24,8 +24,8 @@
 // @run-at       document-idle
 // @homepageURL  https://github.com/ZYar-er/bilibili-live-danmu-plus-one
 // @supportURL   https://github.com/ZYar-er/bilibili-live-danmu-plus-one/issues
-// @updateURL    https://github.com/ZYar-er/bilibili-live-danmu-plus-one/raw/master/bilibili-live-danmu-plus-one.user.js
-// @downloadURL  https://github.com/ZYar-er/bilibili-live-danmu-plus-one/raw/master/bilibili-live-danmu-plus-one.user.js
+// @updateURL    https://github.com/ZYar-er/bilibili-live-danmu-plus-one/releases/latest/download/bilibili-live-danmu-plus-one.user.js
+// @downloadURL  https://github.com/ZYar-er/bilibili-live-danmu-plus-one/releases/latest/download/bilibili-live-danmu-plus-one.user.js
 // ==/UserScript==
 
 (() => {
