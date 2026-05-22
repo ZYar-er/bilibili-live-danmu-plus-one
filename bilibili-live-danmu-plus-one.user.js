@@ -2,7 +2,7 @@
 // @name         B站直播弹幕 +1
 // @name:zh-CN   B站直播弹幕 +1
 // @namespace    https://github.com/ZYar-er/bilibili-live-danmu-plus-one
-// @version      0.0.3
+// @version      0.0.4
 // @description  鼠标悬停弹幕即可一键发送同款弹幕+1，支持文字/emoji/表情图片，可配置发送间隔
 // @description:zh-CN  鼠标悬停弹幕即可一键发送同款弹幕+1，支持文字/emoji/表情图片，可配置发送间隔
 // @author       ZYar-er
@@ -298,6 +298,23 @@
   function getCachedParsed(el) {
     return _parsedCache.get(el);
   }
+  function invalidateStale(nodes, getDmTextFn) {
+    var changed = 0;
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (!(el instanceof HTMLElement))
+        continue;
+      var cached = _parsedCache.get(el);
+      if (!cached)
+        continue;
+      var fresh = getDmTextFn(el);
+      if (fresh.text !== cached.text || fresh.type !== cached.type) {
+        _parsedCache.set(el, fresh);
+        changed++;
+      }
+    }
+    return changed;
+  }
 
   // src/ui/safe-container.js
   var _safeContainer;
@@ -381,7 +398,7 @@
   function renderDebug() {
     if (!CONFIG.debug || !_debugPanel)
       return;
-    _debugPanel.textContent = "[DM+1 DEBUG v0.0.1]\nframe            : " + DBG.frame + "\ndmCount          : " + DBG.dmCount + "\nmouse            : " + DBG.mouse + "\nhitType          : " + (DBG.hitType || "(none)") + "\nhitText          : " + (DBG.hitText || "(none)") + "\nhitSource        : " + (DBG.hitSource || "(none)") + "\nhitSelector      : " + (DBG.hitSelector || "(none)") + "\nhitRect          : " + (DBG.hitRect || "(none)") + "\nbtnVisible       : " + DBG.btnVisible + "\nfrozen           : " + DBG.frozen + "\ncurrentConnected : " + DBG.currentConnected + "\nlastSend         : " + (DBG.lastSend || "(none)") + "\nlastErr          : " + (DBG.lastErr || "(none)") + "\nenableCooldown   : " + DBG.enableSendCooldown + "\ncooldownMs       : " + DBG.cooldownMs + "\nfullscreen       : " + DBG.fullscreen;
+    _debugPanel.textContent = "[DM+1 DEBUG " + (true ? "v0.0.4" : "dev") + "]\n" + +"frame            : " + DBG.frame + "\ndmCount          : " + DBG.dmCount + "\nmouse            : " + DBG.mouse + "\nhitType          : " + (DBG.hitType || "(none)") + "\nhitText          : " + (DBG.hitText || "(none)") + "\nhitSource        : " + (DBG.hitSource || "(none)") + "\nhitSelector      : " + (DBG.hitSelector || "(none)") + "\nhitRect          : " + (DBG.hitRect || "(none)") + "\nbtnVisible       : " + DBG.btnVisible + "\nfrozen           : " + DBG.frozen + "\ncurrentConnected : " + DBG.currentConnected + "\nlastSend         : " + (DBG.lastSend || "(none)") + "\nlastErr          : " + (DBG.lastErr || "(none)") + "\nenableCooldown   : " + DBG.enableSendCooldown + "\ncooldownMs       : " + DBG.cooldownMs + "\nfullscreen       : " + DBG.fullscreen;
   }
 
   // src/core/observer.js
@@ -403,14 +420,18 @@
     var parsed = getDmText(el);
     cacheParsed(el, parsed);
   }
-  function scanAndCache(root2) {
+  function scanAndCache(root2, opts) {
     if (!root2 || !root2.querySelectorAll)
       return;
+    var doInvalidate = opts && opts.invalidate;
     var nodes = root2.querySelectorAll(DM_NODE_SELECTOR);
     var count = 0;
     for (var i = 0; i < nodes.length; i++) {
       cacheIfNeeded(nodes[i]);
       count++;
+    }
+    if (doInvalidate && nodes.length > 0) {
+      invalidateStale(nodes, getDmText);
     }
     var container = findDmContainer();
     if (container && root2 === container) {
@@ -1026,11 +1047,11 @@
     setInterval(function() {
       var scope = findDmContainer();
       if (scope)
-        scanAndCache(scope);
+        scanAndCache(scope, { invalidate: true });
       else
         setDbg("dmCount", 0);
     }, TIMING.DM_SCAN_POLL_MS);
     scheduleFrame();
-    console.log("[DM+1] v0.0.1 loaded");
+    console.log("[DM+1] " + (true ? "v0.0.4" : "dev") + " loaded");
   })();
 })();

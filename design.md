@@ -12,8 +12,10 @@ Tampermonkey 油猴脚本。在 B站直播间悬停弹幕时显示 `+1` 按钮�
 src/
   core/
     observer.js       # MutationObserver：监听弹幕注入/移除，解析缓存，冻结节点救援
+    danmu-cache.js    # WeakMap 缓存弹幕解析结果，避免重复 parse
     hit-test.js       # 鼠标命中检测（elementsFromPoint + rect fallback）
     danmu-parser.js   # 弹幕内容提取（文字/表情IMG/span.emoji）
+    freeze.js         # 弹幕冻结/解冻 + ghost 清理生命周期
     env-detector.js   # 环境检测：全屏scope、活动页外壳（isActivityShell）
   ui/
     button.js         # +1 按钮 UI：创建、定位、显示/隐藏、事件绑定
@@ -25,6 +27,7 @@ src/
   emoji-map.js        # 表情 resource_id → name 映射（由 bilibili-emoji/bilibili-emoji.csv 生成）
   state.js            # 全局状态：{currentHit,frozenRect,lastSendAt,...}
   utils.js            # 工具：root(),isElementAlive(),clamp(),pointInRect(),firstMatch()
+  menus.js            # Tampermonkey 菜单注册（冷却/透明度/调试切换），接受 plusBtn DOM 引用
   index.js            # 入口：组装模块、主循环（按需启停）
 build.js              # esbuild 打包：注入==UserScript==头（含@match blanc*），输出IIFE格式
 bilibili-live-danmu-plus-one.user.js  # 构建产物

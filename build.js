@@ -46,6 +46,9 @@ esbuild.build({
   target: 'es2015',
   banner: { js: userscriptBanner },
   minify: false,
+  define: {
+    __VERSION__: JSON.stringify('v' + version),
+  },
 }).then(function () {
   console.log('Build complete: bilibili-live-danmu-plus-one.user.js (v' + version + ')');
 }).catch(function () { process.exit(1); });

@@ -215,10 +215,10 @@ import { registerMenus } from './menus.js';
   // 定期兜底扫描（高频，减少漏绑）
   setInterval(function () {
     var scope = findDmContainer();
-    if (scope) scanAndCache(scope);
+    if (scope) scanAndCache(scope, { invalidate: true });
     else setDbg('dmCount', 0);
   }, TIMING.DM_SCAN_POLL_MS);
 
   scheduleFrame();
-  console.log('[DM+1] v0.0.1 loaded');
+  console.log('[DM+1] ' + (typeof __VERSION__ !== 'undefined' ? __VERSION__ : 'dev') + ' loaded');
 })();

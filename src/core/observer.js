@@ -3,7 +3,7 @@ import { firstMatch } from '../utils.js';
 import { DM_CONTAINER_SELECTORS, DM_NODE_SELECTOR } from '../config.js';
 import { state } from '../state.js';
 import { getDmText } from './danmu-parser.js';
-import { cacheParsed, getCachedParsed } from './danmu-cache.js';
+import { cacheParsed, getCachedParsed, invalidateStale } from './danmu-cache.js';
 import { rescue } from '../ui/safe-container.js';
 import { setDbg } from '../ui/debug-panel.js';
 
@@ -22,13 +22,17 @@ function cacheIfNeeded(el) {
   cacheParsed(el, parsed);
 }
 
-export function scanAndCache(root) {
+export function scanAndCache(root, opts) {
   if (!root || !root.querySelectorAll) return;
+  var doInvalidate = opts && opts.invalidate;
   var nodes = root.querySelectorAll(DM_NODE_SELECTOR);
   var count = 0;
   for (var i = 0; i < nodes.length; i++) {
     cacheIfNeeded(nodes[i]);
     count++;
+  }
+  if (doInvalidate && nodes.length > 0) {
+    invalidateStale(nodes, getDmText);
   }
   var container = findDmContainer();
   if (container && root === container) {
