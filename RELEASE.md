@@ -1,8 +1,10 @@
-# Release v0.0.4
+# Release v0.0.5
 
 ## 更改
 
-- **版本号自动注入** — 构建时通过 esbuild define 注入 `__VERSION__`，不再硬编码版本字符串
+- **鼠标离开视频区域不调度 rAF** — 仅在鼠标位于弹幕容器范围内时唤醒主循环，减少约 35% 强制重排
+- **发布链接全面指向 latest release** — `@updateURL`/`@downloadURL` 从 raw/master 迁移至 releases/latest/download
+- **CI 优化** — release job 复用 build artifact，避免重复构建；切换至 Node.js 24
 - **弹幕 DOM 元素复用检测** — 300ms 周期扫描加入 textContent 变更检测，B站回收 DOM 改内容也能正确识别
 - **混合弹幕空格修复** — "001[大笑]" 类型图文混合弹幕不再出现多余空格
 - **性能优化** — `resolvePayload` 缓存优先、`scanAndCache` 单次遍历、`textContent` 快速路径，`getDmText` 调用减少约 9x

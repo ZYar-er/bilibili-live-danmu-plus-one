@@ -1,6 +1,6 @@
 {
   "name": "bilibili-live-danmu-plus-one",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
   "description": "Bilibili live danmaku +1 Tampermonkey script",
   "license": "MIT",
