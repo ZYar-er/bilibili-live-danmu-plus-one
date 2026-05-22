@@ -26,8 +26,8 @@ export function getDmText(el) {
   var parts = [];
   el.childNodes.forEach(function (child) {
     if (child.nodeType === Node.TEXT_NODE) {
-      var t = child.textContent.replace(/\s+/g, ' ').trim();
-      if (t) parts.push({ type: 'text', value: t });
+      var t = child.textContent.replace(/\s+/g, ' ');
+      if (t.trim()) parts.push({ type: 'text', value: t });
     } else if (child.tagName === 'IMG') {
       var name = resolveEmojiNameFromImg(child);
       if (name) parts.push({ type: 'emoji', value: '[' + name + ']' });
@@ -38,7 +38,7 @@ export function getDmText(el) {
 
   if (parts.length === 0) return { type: 'unknown', text: '' };
 
-  var text = parts.map(function (p) { return p.value; }).join(' ').replace(/\s+/g, ' ').trim();
+  var text = parts.map(function (p) { return p.value; }).join('').replace(/\s+/g, ' ').trim();
 
   var hasText = false, hasEmoji = false;
   parts.forEach(function (p) {

@@ -261,8 +261,8 @@
     var parts = [];
     el.childNodes.forEach(function(child) {
       if (child.nodeType === Node.TEXT_NODE) {
-        var t = child.textContent.replace(/\s+/g, " ").trim();
-        if (t)
+        var t = child.textContent.replace(/\s+/g, " ");
+        if (t.trim())
           parts.push({ type: "text", value: t });
       } else if (child.tagName === "IMG") {
         var name = resolveEmojiNameFromImg(child);
@@ -276,7 +276,7 @@
       return { type: "unknown", text: "" };
     var text = parts.map(function(p) {
       return p.value;
-    }).join(" ").replace(/\s+/g, " ").trim();
+    }).join("").replace(/\s+/g, " ").trim();
     var hasText = false, hasEmoji = false;
     parts.forEach(function(p) {
       if (p.type === "text")
