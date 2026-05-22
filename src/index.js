@@ -1,6 +1,6 @@
-import { TIMING, CONFIG, DM_NODE_SELECTOR, DM_CONTAINER_SELECTORS } from './config.js';
+import { TIMING, CONFIG, DM_NODE_SELECTOR, DM_CONTAINER_SELECTORS, UI } from './config.js';
 import { state } from './state.js';
-import { isElementAlive } from './utils.js';
+import { isElementAlive, pointInRect } from './utils.js';
 import { getScope, isActivityShell } from './core/env-detector.js';
 import { scanAndCache, findDmContainer, bindObserverTarget } from './core/observer.js';
 import { hitTest } from './core/hit-test.js';
@@ -54,12 +54,25 @@ import { registerMenus } from './menus.js';
 
   // ========= mousemove =========
   var dmContainerCache = null;
+  var containerRect = null, containerRectTime = 0;
   document.addEventListener('mousemove', function (e) {
     state.mouse.x = e.clientX;
     state.mouse.y = e.clientY;
     mouseDirty = true;
-    // 仅当有弹幕容器或活跃命中时才唤醒循环，避免在页面空白区域浪费帧
-    if (state.currentHit || dmContainerCache) {
+
+    // 有命中时保持循环（需要处理 leave/unfreeze），全屏时整个视口都是有效区
+    if (state.currentHit || document.fullscreenElement) {
+      scheduleFrame();
+      return;
+    }
+    // 没有容器时不做任何调度（页面未加载或非直播页）
+    if (!dmContainerCache) return;
+    // 缓存容器 rect，1s TTL 避免每帧强制重排
+    if (!containerRect || e.timeStamp - containerRectTime > 1000) {
+      containerRect = dmContainerCache.getBoundingClientRect();
+      containerRectTime = e.timeStamp;
+    }
+    if (pointInRect(e.clientX, e.clientY, containerRect, UI.HIT_PADDING_PX)) {
       scheduleFrame();
     }
   }, { capture: true, passive: true });
@@ -70,6 +83,7 @@ import { registerMenus } from './menus.js';
     ensureSafeContainer();
     ensureDebugPanelParent();
     state.dmObserverTarget = null;
+    containerRect = null;
     setDbg('fullscreen', !!document.fullscreenElement);
     scheduleFrame();
   });
@@ -93,6 +107,7 @@ import { registerMenus } from './menus.js';
       var container = findDmContainer();
       if (container) {
         dmContainerCache = container;
+        containerRect = null;
         scanAndCache(container);
         clearInterval(containerWaitTimer);
         containerWaitTimer = 0;
@@ -132,6 +147,7 @@ import { registerMenus } from './menus.js';
     var dmContainer = findDmContainer();
     if (CONFIG.debug) setDbg('mouse', state.mouse.x + ',' + state.mouse.y);
 
+    if (dmContainer !== dmContainerCache) containerRect = null;
     dmContainerCache = dmContainer;
 
     if (!dmContainer) {

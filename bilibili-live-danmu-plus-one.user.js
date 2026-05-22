@@ -887,11 +887,22 @@
     ensureSafeContainer();
     setupButtonEvents().injectSender(sendDanmaku);
     var dmContainerCache = null;
+    var containerRect = null, containerRectTime = 0;
     document.addEventListener("mousemove", function(e) {
       state.mouse.x = e.clientX;
       state.mouse.y = e.clientY;
       mouseDirty = true;
-      if (state.currentHit || dmContainerCache) {
+      if (state.currentHit || document.fullscreenElement) {
+        scheduleFrame();
+        return;
+      }
+      if (!dmContainerCache)
+        return;
+      if (!containerRect || e.timeStamp - containerRectTime > 1e3) {
+        containerRect = dmContainerCache.getBoundingClientRect();
+        containerRectTime = e.timeStamp;
+      }
+      if (pointInRect(e.clientX, e.clientY, containerRect, UI.HIT_PADDING_PX)) {
         scheduleFrame();
       }
     }, { capture: true, passive: true });
@@ -900,6 +911,7 @@
       ensureSafeContainer();
       ensureDebugPanelParent();
       state.dmObserverTarget = null;
+      containerRect = null;
       setDbg("fullscreen", !!document.fullscreenElement);
       scheduleFrame();
     });
@@ -921,6 +933,7 @@
         var container2 = findDmContainer();
         if (container2) {
           dmContainerCache = container2;
+          containerRect = null;
           scanAndCache(container2);
           clearInterval(containerWaitTimer);
           containerWaitTimer = 0;
@@ -961,6 +974,8 @@
       var dmContainer = findDmContainer();
       if (CONFIG.debug)
         setDbg("mouse", state.mouse.x + "," + state.mouse.y);
+      if (dmContainer !== dmContainerCache)
+        containerRect = null;
       dmContainerCache = dmContainer;
       if (!dmContainer) {
         state.noPlayerCount++;
