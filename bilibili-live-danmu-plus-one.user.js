@@ -293,27 +293,11 @@
   function cacheParsed(el, payload) {
     if (!el)
       return;
+    payload._raw = el.textContent;
     _parsedCache.set(el, payload);
   }
   function getCachedParsed(el) {
     return _parsedCache.get(el);
-  }
-  function invalidateStale(nodes, getDmTextFn) {
-    var changed = 0;
-    for (var i = 0; i < nodes.length; i++) {
-      var el = nodes[i];
-      if (!(el instanceof HTMLElement))
-        continue;
-      var cached = _parsedCache.get(el);
-      if (!cached)
-        continue;
-      var fresh = getDmTextFn(el);
-      if (fresh.text !== cached.text || fresh.type !== cached.type) {
-        _parsedCache.set(el, fresh);
-        changed++;
-      }
-    }
-    return changed;
   }
 
   // src/ui/safe-container.js
@@ -427,11 +411,19 @@
     var nodes = root2.querySelectorAll(DM_NODE_SELECTOR);
     var count = 0;
     for (var i = 0; i < nodes.length; i++) {
-      cacheIfNeeded(nodes[i]);
+      var el = nodes[i];
+      if (!(el instanceof HTMLElement))
+        continue;
+      var cached = getCachedParsed(el);
+      if (!cached) {
+        cacheParsed(el, getDmText(el));
+      } else if (doInvalidate && el.textContent !== cached._raw) {
+        var fresh = getDmText(el);
+        if (fresh.text !== cached.text || fresh.type !== cached.type) {
+          cacheParsed(el, fresh);
+        }
+      }
       count++;
-    }
-    if (doInvalidate && nodes.length > 0) {
-      invalidateStale(nodes, getDmText);
     }
     var container = findDmContainer();
     if (container && root2 === container) {
@@ -464,7 +456,7 @@
           var node = added[ai];
           if (isDanmuNode(node))
             cacheIfNeeded(node);
-          if (node.nodeType === Node.ELEMENT_NODE)
+          else if (node.nodeType === Node.ELEMENT_NODE)
             scanAndCache(node);
         }
         for (var ri = 0; ri < removed.length; ri++) {
@@ -937,6 +929,8 @@
     }
     function resolvePayload(el) {
       var cached = getCachedParsed(el);
+      if (cached && el.textContent === cached._raw)
+        return cached;
       var parsed = getDmText(el);
       if (!cached || cached.text !== parsed.text || cached.type !== parsed.type) {
         cacheParsed(el, parsed);

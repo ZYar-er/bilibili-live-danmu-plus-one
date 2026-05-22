@@ -3,7 +3,7 @@ import { firstMatch } from '../utils.js';
 import { DM_CONTAINER_SELECTORS, DM_NODE_SELECTOR } from '../config.js';
 import { state } from '../state.js';
 import { getDmText } from './danmu-parser.js';
-import { cacheParsed, getCachedParsed, invalidateStale } from './danmu-cache.js';
+import { cacheParsed, getCachedParsed } from './danmu-cache.js';
 import { rescue } from '../ui/safe-container.js';
 import { setDbg } from '../ui/debug-panel.js';
 
@@ -28,11 +28,18 @@ export function scanAndCache(root, opts) {
   var nodes = root.querySelectorAll(DM_NODE_SELECTOR);
   var count = 0;
   for (var i = 0; i < nodes.length; i++) {
-    cacheIfNeeded(nodes[i]);
+    var el = nodes[i];
+    if (!(el instanceof HTMLElement)) continue;
+    var cached = getCachedParsed(el);
+    if (!cached) {
+      cacheParsed(el, getDmText(el));
+    } else if (doInvalidate && el.textContent !== cached._raw) {
+      var fresh = getDmText(el);
+      if (fresh.text !== cached.text || fresh.type !== cached.type) {
+        cacheParsed(el, fresh);
+      }
+    }
     count++;
-  }
-  if (doInvalidate && nodes.length > 0) {
-    invalidateStale(nodes, getDmText);
   }
   var container = findDmContainer();
   if (container && root === container) {
@@ -68,7 +75,7 @@ export function bindObserverTarget(container) {
       for (var ai = 0; ai < added.length; ai++) {
         var node = added[ai];
         if (isDanmuNode(node)) cacheIfNeeded(node);
-        if (node.nodeType === Node.ELEMENT_NODE) scanAndCache(node);
+        else if (node.nodeType === Node.ELEMENT_NODE) scanAndCache(node);
       }
       for (var ri = 0; ri < removed.length; ri++) {
         var rm = removed[ri];

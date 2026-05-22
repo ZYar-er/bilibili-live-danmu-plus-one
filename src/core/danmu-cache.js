@@ -2,6 +2,7 @@ var _parsedCache = new WeakMap();
 
 export function cacheParsed(el, payload) {
   if (!el) return;
+  payload._raw = el.textContent;
   _parsedCache.set(el, payload);
 }
 
@@ -20,6 +21,7 @@ export function invalidateStale(nodes, getDmTextFn) {
     if (!(el instanceof HTMLElement)) continue;
     var cached = _parsedCache.get(el);
     if (!cached) continue;
+    if (el.textContent === cached._raw) continue;
     var fresh = getDmTextFn(el);
     if (fresh.text !== cached.text || fresh.type !== cached.type) {
       _parsedCache.set(el, fresh);
