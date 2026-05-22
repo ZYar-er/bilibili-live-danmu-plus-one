@@ -34,6 +34,7 @@ export function scanAndCache(root, opts) {
     if (!cached) {
       cacheParsed(el, getDmText(el));
     } else if (doInvalidate && el.textContent !== cached._raw) {
+      cached._raw = el.textContent;
       var fresh = getDmText(el);
       if (fresh.text !== cached.text || fresh.type !== cached.type) {
         cacheParsed(el, fresh);

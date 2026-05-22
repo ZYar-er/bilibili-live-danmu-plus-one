@@ -418,6 +418,7 @@
       if (!cached) {
         cacheParsed(el, getDmText(el));
       } else if (doInvalidate && el.textContent !== cached._raw) {
+        cached._raw = el.textContent;
         var fresh = getDmText(el);
         if (fresh.text !== cached.text || fresh.type !== cached.type) {
           cacheParsed(el, fresh);
@@ -932,6 +933,8 @@
       if (cached && el.textContent === cached._raw)
         return cached;
       var parsed = getDmText(el);
+      if (cached)
+        cached._raw = el.textContent;
       if (!cached || cached.text !== parsed.text || cached.type !== parsed.type) {
         cacheParsed(el, parsed);
         cached = parsed;

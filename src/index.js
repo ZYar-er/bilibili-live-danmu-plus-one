@@ -105,6 +105,7 @@ import { registerMenus } from './menus.js';
     var cached = getCachedParsed(el);
     if (cached && el.textContent === cached._raw) return cached;
     var parsed = getDmText(el);
+    if (cached) cached._raw = el.textContent;
     if (!cached || cached.text !== parsed.text || cached.type !== parsed.type) {
       cacheParsed(el, parsed);
       cached = parsed;
