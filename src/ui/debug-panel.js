@@ -56,7 +56,7 @@ export function renderDebug() {
   if (!CONFIG.debug || !_debugPanel) return;
   _debugPanel.textContent =
     '[DM+1 DEBUG ' + (typeof __VERSION__ !== 'undefined' ? __VERSION__ : 'dev') + ']\n' +
-    + 'frame            : ' + DBG.frame + '\n'
+    'frame            : ' + DBG.frame + '\n'
     + 'dmCount          : ' + DBG.dmCount + '\n'
     + 'mouse            : ' + DBG.mouse + '\n'
     + 'hitType          : ' + (DBG.hitType || '(none)') + '\n'
