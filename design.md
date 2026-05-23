@@ -90,7 +90,7 @@ B站弹幕DOM特征：
 - 空文本弹幕 → 返回{type:'unknown',text:''}，不显示按钮
 
 补充：当前版本可正常支持标准 emoji（Unicode 字符）与 B 站特殊表情。
-补充：通过 `bilibili-emoji/bilibili-emoji.csv` 生成 `src/emoji-map.js`，从 IMG 的 `resource_id` 或 `src` 提取表情名并发送为 `[名称]`。
+补充：通过 `npm run update:emoji-map` 从 `bilibili-emoji/bilibili-emoji.csv` 生成 `src/emoji-map.js`，从 IMG 的 `resource_id` 或 `src` 提取表情名并发送为 `[名称]`。
 
 ### 选择器策略
 - DM_NODE_SELECTOR = `.bili-danmaku-x-dm[role="comment"]`
