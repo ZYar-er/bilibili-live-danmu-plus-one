@@ -254,7 +254,7 @@ MutationObserver
 - esbuild: `entryPoints:['src/index.js']`, `format:'iife'`, `target:'es2015'`
 - banner注入完整==UserScript==头部（含@match/@grant/@run-at）
 - @grant 仅保留 `GM_getValue` / `GM_setValue` / `GM_deleteValue`（已移除 `GM_registerMenuCommand`）
-- @icon 指向 `docs/logo.svg`（B站粉 +1 logo）
+- @icon 内嵌 `docs/logo.svg` 的 base64 data URI（B站粉 +1 logo，不依赖远程地址）
 - @match: `*://live.bilibili.com/0*` ~ `9*`（数字房间号）+ `*://live.bilibili.com/blanc*`（活动页 iframe）
 - 产物：`bili-danmu-plus1.user.js`
 
