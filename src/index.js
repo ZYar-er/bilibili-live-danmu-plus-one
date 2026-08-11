@@ -11,7 +11,7 @@ import { freeze, clearCurrentHit } from './core/freeze.js';
 import { initDebugPanel, ensureDebugPanelParent, setDbg, renderDebug } from './ui/debug-panel.js';
 import { ensureSafeContainer } from './ui/safe-container.js';
 import { sendDanmaku } from './sender/input-sender.js';
-import { registerMenus } from './menus.js';
+import { initControlPanel, ensureControlPanel } from './ui/control-panel.js';
 
 (function init() {
   if (isActivityShell()) {
@@ -48,6 +48,7 @@ import { registerMenus } from './menus.js';
   var plusBtn = createPlusBtn();
   initDebugPanel();
   ensureSafeContainer();
+  initControlPanel(plusBtn);
 
   // 注入 sendDanmaku 到按钮 click 事件
   setupButtonEvents().injectSender(sendDanmaku);
@@ -82,6 +83,7 @@ import { registerMenus } from './menus.js';
     mountOverlay();
     ensureSafeContainer();
     ensureDebugPanelParent();
+    ensureControlPanel();
     state.dmObserverTarget = null;
     containerRect = null;
     setDbg('fullscreen', !!document.fullscreenElement);
@@ -222,7 +224,7 @@ import { registerMenus } from './menus.js';
   setDbg('cooldownMs', CONFIG.cooldownMs);
   setDbg('enableSendCooldown', CONFIG.enableSendCooldown);
   renderDebug();
-  registerMenus(plusBtn);
+  setInterval(ensureControlPanel, 2000);
 
   // 初始扫描
   var container = findDmContainer();

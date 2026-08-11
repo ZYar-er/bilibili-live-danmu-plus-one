@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Bilibili Danmu Inspector
-// @namespace    https://github.com/ZYar-er/bilibili-live-danmu-plus-one
+// @namespace    https://github.com/ZYar-er/bili-danmu-plus1
 // @version      0.2.0
 // @description  抓取 B站直播间弹幕 DOM 节点结构并导出 JSON
 // @match        https://live.bilibili.com/*

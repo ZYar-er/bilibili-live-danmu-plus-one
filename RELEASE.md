@@ -1,23 +1,20 @@
-# Release v0.0.5
+# Release v0.0.6
 
 ## 更改
 
-- **鼠标离开视频区域不调度 rAF** — 仅在鼠标位于弹幕容器范围内时唤醒主循环，减少约 35% 强制重排
-- **发布链接全面指向 latest release** — `@updateURL`/`@downloadURL` 从 raw/master 迁移至 releases/latest/download
-- **CI 优化** — release job 复用 build artifact，避免重复构建；切换至 Node.js 24
-- **弹幕 DOM 元素复用检测** — 300ms 周期扫描加入 textContent 变更检测，B站回收 DOM 改内容也能正确识别
-- **混合弹幕空格修复** — "001[大笑]" 类型图文混合弹幕不再出现多余空格
-- **性能优化** — `resolvePayload` 缓存优先、`scanAndCache` 单次遍历、`textContent` 快速路径，`getDmText` 调用减少约 9x
-- **调试面板 NaN 修复** — 双 `+` 运算符导致的 NaN 显示问题已修正
-- **设计文档更新** — `design.md` 文件结构补全缺失模块
+- **页内控制面板** — 设置入口迁移到直播间播放器控制栏（点赞按钮左侧的齿轮图标），移除 Tampermonkey 菜单
+- **面板设置** — 发送冷却开关、发送间隔、按钮透明度、调试面板、重置设置
+- **GitHub Pages** — 新增介绍与安装引导页：https://zyar-er.github.io/bili-danmu-plus1/
+- **Logo** — 新增 B站粉 +1 logo，用于 README、favicon 与脚本 `@icon`
+- **仓库更名** — 仓库与 userscript 更名为 `bili-danmu-plus1` / `bili-danmu-plus1.user.js`
 
 ## 安装方法
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展。
-2. 打开 [Latest Release](https://github.com/ZYar-er/bilibili-live-danmu-plus-one/releases/latest) 下载 `bilibili-live-danmu-plus-one.user.js`。
+2. 打开 [介绍页](https://zyar-er.github.io/bili-danmu-plus1/) 点击「安装脚本」。
 3. Tampermonkey 自动弹出安装页，点击「安装」即可。
 
 ## 说明
 
-- Release 产物包含最新构建的 `bilibili-live-danmu-plus-one.user.js`。
+- Release 产物包含最新构建的 `bili-danmu-plus1.user.js`。
 - 脚本内置自动更新指向 latest release，Tampermonkey 会定期检查更新。

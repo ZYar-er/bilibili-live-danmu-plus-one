@@ -19,6 +19,7 @@ src/
     env-detector.js   # 环境检测：全屏scope、活动页外壳（isActivityShell）
   ui/
     button.js         # +1 按钮 UI：创建、定位、显示/隐藏、事件绑定
+    control-panel.js  # 页内设置面板：控制栏齿轮入口 + 浮层（冷却/透明度/调试/重置）
     debug-panel.js    # 固定定位调试面板，全屏时迁移到 fullscreenElement
     safe-container.js # 冻结弹幕安全容器 + rescue
   sender/
@@ -27,10 +28,9 @@ src/
   emoji-map.js        # 表情 resource_id → name 映射（由 bilibili-emoji/bilibili-emoji.csv 生成）
   state.js            # 全局状态：{currentHit,frozenRect,lastSendAt,...}
   utils.js            # 工具：root(),isElementAlive(),clamp(),pointInRect(),firstMatch()
-  menus.js            # Tampermonkey 菜单注册（冷却/透明度/调试切换），接受 plusBtn DOM 引用
   index.js            # 入口：组装模块、主循环（按需启停）
 build.js              # esbuild 打包：注入==UserScript==头（含@match blanc*），输出IIFE格式
-bilibili-live-danmu-plus-one.user.js  # 构建产物
+bili-danmu-plus1.user.js              # 构建产物
 ```
 
 ### 模块依赖原则
@@ -39,7 +39,7 @@ bilibili-live-danmu-plus-one.user.js  # 构建产物
 - `hit-test.js` 为纯命中检测，缓存逻辑已移出
 - `button.js` 为纯按钮 UI，freeze/ghost 生命周期已移入 `freeze.js`
 - `index.js` 直接依赖 `danmu-cache.js` 和 `freeze.js`，不通过 button/hit-test 间接获取
-- `menus.js` 接受 `plusBtn` DOM 元素作为参数，不访问其他模块内部状态
+- `control-panel.js` 接受 `plusBtn` DOM 元素作为参数，负责控制栏入口重挂载与设置浮层
 
 ## 弹幕命中与缓存策略
 
@@ -81,6 +81,13 @@ B站弹幕DOM特征：
 - 按钮mouseenter→clearTimeout取消隐藏
 - 按钮mouseleave→50ms延迟隐藏（鼠标可能回弹幕）
 - fullscreenchange→设dmObserverTarget=null强制重绑MO
+
+### 页内控制面板（control-panel.js）
+- 入口：作为 `.control-panel-icon-row.superChat .icon-right-part` 的首个子元素插入（点赞按钮左侧），2s 轮询检测控制栏重建并重挂载；控制栏缺失时兜底为右下角悬浮齿轮
+- 浮层：`position:fixed` 锚定在入口图标上方（空间不足则下方），视口内 clamp，追加到 `root()` 以兼容全屏
+- 交互：外部 `mousedown` 或 `Esc` 关闭；设置变更即写 `CONFIG` 并 `storageSet`，存储 key 保持不变
+- 设置项：发送冷却开关 + 间隔下拉（关闭时禁用）、按钮透明度 5 档、调试面板开关、重置（二次确认后清配置并 reload）
+- 已移除 `GM_registerMenuCommand`，设置入口统一走页内面板
 
 ### 弹幕文本提取（danmu-parser.js）
 - 遍历el.childNodes（直接子节点，非递归）
@@ -246,8 +253,10 @@ MutationObserver
 ### 构建
 - esbuild: `entryPoints:['src/index.js']`, `format:'iife'`, `target:'es2015'`
 - banner注入完整==UserScript==头部（含@match/@grant/@run-at）
+- @grant 仅保留 `GM_getValue` / `GM_setValue` / `GM_deleteValue`（已移除 `GM_registerMenuCommand`）
+- @icon 指向 `docs/logo.svg`（B站粉 +1 logo）
 - @match: `*://live.bilibili.com/0*` ~ `9*`（数字房间号）+ `*://live.bilibili.com/blanc*`（活动页 iframe）
-- 产物：`bilibili-live-danmu-plus-one.user.js`
+- 产物：`bili-danmu-plus1.user.js`
 
 ## 已知限制
 

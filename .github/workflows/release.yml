@@ -28,15 +28,15 @@ jobs:
 
       - name: Verify output
         run: |
-          test -f bilibili-live-danmu-plus-one.user.js || (echo "MISSING: output file not found" && exit 1)
-          head -5 bilibili-live-danmu-plus-one.user.js
+          test -f bili-danmu-plus1.user.js || (echo "MISSING: output file not found" && exit 1)
+          head -5 bili-danmu-plus1.user.js
 
       - name: Upload artifact
         if: github.ref_type == 'tag'
         uses: actions/upload-artifact@v4
         with:
           name: userscript
-          path: bilibili-live-danmu-plus-one.user.js
+          path: bili-danmu-plus1.user.js
 
   release:
     if: github.ref_type == 'tag'
@@ -57,6 +57,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            bilibili-live-danmu-plus-one.user.js
+            bili-danmu-plus1.user.js
           body_path: RELEASE.md
           generate_release_notes: true

@@ -9,12 +9,13 @@ if (version.startsWith('v')) version = version.slice(1);
 const userscriptBanner = `// ==UserScript==
 // @name         B站直播弹幕 +1
 // @name:zh-CN   B站直播弹幕 +1
-// @namespace    https://github.com/ZYar-er/bilibili-live-danmu-plus-one
+// @namespace    https://github.com/ZYar-er/bili-danmu-plus1
 // @version      ${version}
 // @description  鼠标悬停弹幕即可一键发送同款弹幕+1，支持文字/emoji/表情图片，可配置发送间隔
 // @description:zh-CN  鼠标悬停弹幕即可一键发送同款弹幕+1，支持文字/emoji/表情图片，可配置发送间隔
 // @author       ZYar-er
 // @license      MIT
+// @icon         https://raw.githubusercontent.com/ZYar-er/bili-danmu-plus1/master/docs/logo.svg
 // @match        *://live.bilibili.com/0*
 // @match        *://live.bilibili.com/1*
 // @match        *://live.bilibili.com/2*
@@ -28,19 +29,19 @@ const userscriptBanner = `// ==UserScript==
 // @match        *://live.bilibili.com/blanc*
 // @grant        GM_getValue
 // @grant        GM_setValue
-// @grant        GM_registerMenuCommand
+// @grant        GM_deleteValue
 // @run-at       document-idle
-// @homepageURL  https://github.com/ZYar-er/bilibili-live-danmu-plus-one
-// @supportURL   https://github.com/ZYar-er/bilibili-live-danmu-plus-one/issues
-// @updateURL    https://github.com/ZYar-er/bilibili-live-danmu-plus-one/releases/latest/download/bilibili-live-danmu-plus-one.user.js
-// @downloadURL  https://github.com/ZYar-er/bilibili-live-danmu-plus-one/releases/latest/download/bilibili-live-danmu-plus-one.user.js
+// @homepageURL  https://github.com/ZYar-er/bili-danmu-plus1
+// @supportURL   https://github.com/ZYar-er/bili-danmu-plus1/issues
+// @updateURL    https://github.com/ZYar-er/bili-danmu-plus1/releases/latest/download/bili-danmu-plus1.user.js
+// @downloadURL  https://github.com/ZYar-er/bili-danmu-plus1/releases/latest/download/bili-danmu-plus1.user.js
 // ==/UserScript==
 `;
 
 esbuild.build({
   entryPoints: ['src/index.js'],
   bundle: true,
-  outfile: 'bilibili-live-danmu-plus-one.user.js',
+  outfile: 'bili-danmu-plus1.user.js',
   format: 'iife',
   platform: 'browser',
   target: 'es2015',
@@ -50,5 +51,5 @@ esbuild.build({
     __VERSION__: JSON.stringify('v' + version),
   },
 }).then(function () {
-  console.log('Build complete: bilibili-live-danmu-plus-one.user.js (v' + version + ')');
+  console.log('Build complete: bili-danmu-plus1.user.js (v' + version + ')');
 }).catch(function () { process.exit(1); });

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>B站直播弹幕 +1</title>
+  <meta name="description" content="悬停 B站直播弹幕，一键发送同款弹幕 +1 的 Tampermonkey 脚本。">
+  <link rel="icon" type="image/svg+xml" href="logo.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="./">B站直播弹幕 <span>+1</span></a>
+      <nav>
+        <a href="#features">功能</a>
+        <a href="#install">安装</a>
+        <a href="#usage">使用</a>
+        <a href="https://github.com/ZYar-er/bili-danmu-plus1">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container hero-inner">
+        <p class="eyebrow">Tampermonkey 用户脚本</p>
+        <h1>B站直播弹幕 <em>+1</em></h1>
+        <p class="lead">鼠标划过任意弹幕，点击弹出的 +1 按钮，即可发送同款弹幕，<span class="nowrap">支持文字、emoji 与表情图片</span>。</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="https://github.com/ZYar-er/bili-danmu-plus1/releases/latest/download/bili-danmu-plus1.user.js">安装脚本</a>
+          <a class="btn btn-ghost" href="https://github.com/ZYar-er/bili-danmu-plus1">查看源码</a>
+        </div>
+        <p class="hero-note">需要 Tampermonkey ≥ 5.0，安装后进入任意 B站直播间即可使用。</p>
+      </div>
+    </section>
+
+    <section class="screenshot-section" id="screenshot">
+      <div class="container">
+        <h2>效果预览</h2>
+        <figure class="screenshot-figure">
+          <img class="screenshot-img" src="screenshot.png" alt="悬停弹幕出现 +1 按钮的效果截图">
+        </figure>
+      </div>
+    </section>
+
+    <section class="features" id="features">
+      <div class="container">
+        <h2>功能</h2>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <h3>悬停即用</h3>
+            <p>鼠标划过弹幕即出现 +1 按钮，点击一键发送同款弹幕。</p>
+          </article>
+          <article class="feature-card">
+            <h3>Emoji 支持</h3>
+            <p>兼容文字 emoji、常规表情与特殊表情（resource_id 映射）。</p>
+          </article>
+          <article class="feature-card">
+            <h3>图文混合</h3>
+            <p>正确处理「哈哈哈[大笑]笑死」等混合弹幕内容。</p>
+          </article>
+          <article class="feature-card">
+            <h3>弹幕冻结恢复</h3>
+            <p>悬停时弹幕暂停，移开后从冻结位置继续滚动至自然消失。</p>
+          </article>
+          <article class="feature-card">
+            <h3>页内控制面板</h3>
+            <p>播放器控制栏内置齿轮设置面板，无需再开 Tampermonkey 菜单。</p>
+          </article>
+          <article class="feature-card">
+            <h3>全屏兼容</h3>
+            <p>普通直播间、活动页 iframe 与全屏模式下均正常使用。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="install" id="install">
+      <div class="container">
+        <h2>安装</h2>
+        <ol class="steps">
+          <li><a class="step-link" href="https://www.tampermonkey.net/" target="_blank" rel="noopener">安装 Tampermonkey</a><p>前往 tampermonkey.net 安装浏览器扩展（Chrome / Edge / Firefox）。</p></li>
+          <li><strong>安装本脚本</strong><p>点击上方「安装脚本」按钮，Tampermonkey 会自动弹出安装页面。</p></li>
+          <li><strong>打开直播间</strong><p>进入任意 B站直播间，悬停弹幕即可使用。</p></li>
+        </ol>
+        <p class="note">脚本会自动检查更新，新版发布后 Tampermonkey 会定期拉取最新版本。</p>
+      </div>
+    </section>
+
+    <section class="usage" id="usage">
+      <div class="container">
+        <h2>使用</h2>
+        <ol class="steps">
+          <li>鼠标移动到弹幕上，出现半透明 +1 按钮。</li>
+          <li>点击按钮，自动填入弹幕内容并发送。</li>
+          <li>默认有 2 秒发送冷却，防止刷屏。</li>
+        </ol>
+        <h3>设置面板</h3>
+        <p>点击直播间播放器控制栏中点赞按钮左侧的齿轮图标，可调整发送冷却开关、发送间隔、按钮透明度和调试面板。</p>
+      </div>
+    </section>
+
+    <section class="faq" id="faq">
+      <div class="container">
+        <h2>常见问题</h2>
+        <details>
+          <summary>脚本会收集我的数据吗？</summary>
+          <p>不会。所有设置仅保存在浏览器本地，脚本不上传任何数据。</p>
+        </details>
+        <details>
+          <summary>遇到未识别的新表情怎么办？</summary>
+          <p>可以到 GitHub Issues 反馈，项目会更新表情映射表。</p>
+        </details>
+        <details>
+          <summary>支持哪些浏览器？</summary>
+          <p>Chrome 90+ / Edge 90+ / Firefox 90+，配合 Tampermonkey ≥ 5.0。</p>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>B站直播弹幕 +1 · MIT License</p>
+      <p>
+        <a href="https://github.com/ZYar-er/bili-danmu-plus1">GitHub</a>
+        ·
+        <a href="https://github.com/ZYar-er/bili-danmu-plus1/issues">Issues</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>
