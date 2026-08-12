@@ -58,7 +58,8 @@
     ".web-player-danmaku",
     ".live-player-dm-wrap"
   ];
-  var DM_NODE_SELECTOR = '.bili-danmaku-x-dm[role="comment"]';
+  var DM_CLASS = "bili-danmaku-x-dm";
+  var DM_NODE_SELECTOR = "." + DM_CLASS + '[role="comment"]';
   function storageGet(key, def) {
     try {
       const v = GM_getValue(key);
@@ -547,8 +548,19 @@
       return false;
     if (!(node instanceof HTMLElement))
       return false;
-    if (node.matches && node.matches(DM_NODE_SELECTOR))
-      return true;
+    return !!(node.classList && node.classList.contains(DM_CLASS)) && node.getAttribute("role") === "comment";
+  }
+  function eachDanmuNode(root2, fn) {
+    if (!root2 || !root2.getElementsByClassName)
+      return false;
+    var list = root2.getElementsByClassName(DM_CLASS);
+    for (var i = 0; i < list.length; i++) {
+      var el = list[i];
+      if (el.getAttribute && el.getAttribute("role") !== "comment")
+        continue;
+      if (fn(el) === true)
+        return true;
+    }
     return false;
   }
   function cacheIfNeeded(el) {
@@ -561,15 +573,13 @@
     cacheParsed(el, parsed);
   }
   function scanAndCache(root2, opts) {
-    if (!root2 || !root2.querySelectorAll)
+    if (!root2 || !root2.getElementsByClassName)
       return;
     var doInvalidate = opts && opts.invalidate;
-    var nodes = root2.querySelectorAll(DM_NODE_SELECTOR);
     var count = 0;
-    for (var i = 0; i < nodes.length; i++) {
-      var el = nodes[i];
+    eachDanmuNode(root2, function(el) {
       if (!(el instanceof HTMLElement))
-        continue;
+        return;
       var cached = getCachedParsed(el);
       if (!cached) {
         cacheParsed(el, getDmText(el));
@@ -581,12 +591,14 @@
         }
       }
       count++;
-    }
-    var container = findDmContainer();
-    if (container && root2 === container) {
-      setDbg("dmCount", count);
-    } else if (!container) {
-      setDbg("dmCount", 0);
+    });
+    if (CONFIG.debug) {
+      var container = findDmContainer();
+      if (container && root2 === container) {
+        setDbg("dmCount", count);
+      } else if (!container) {
+        setDbg("dmCount", 0);
+      }
     }
   }
   function findDmContainer() {
@@ -680,29 +692,26 @@
   function fallbackScan(container, x, y) {
     if (!container)
       return null;
-    var scope = container;
-    if (!scope || !scope.querySelectorAll)
-      return null;
-    var nodes = scope.querySelectorAll(DM_NODE_SELECTOR);
-    for (var i = 0; i < nodes.length; i++) {
-      var el = nodes[i];
+    var hit = null;
+    eachDanmuNode(container, function(el) {
       if (!isElementAlive(el))
-        continue;
+        return;
       var r = el.getBoundingClientRect();
       if (r.width <= 4)
-        continue;
+        return;
       if (!pointInRect(x, y, r, UI.HIT_PADDING_PX))
-        continue;
-      return { el, rect: r, rectText: rectText(r), selector: buildSelector(el), source: "fallbackScan" };
-    }
-    return null;
+        return;
+      hit = { el, rect: r, rectText: rectText(r), selector: buildSelector(el), source: "fallbackScan" };
+      return true;
+    });
+    return hit;
   }
-  function hitTest(x, y, container) {
+  function hitTest(x, y, container, containerRect) {
     if (x == null || y == null)
       return null;
     var dmContainer = resolveContainer(container);
     if (dmContainer) {
-      var cr = dmContainer.getBoundingClientRect();
+      var cr = containerRect || dmContainer.getBoundingClientRect();
       if (cr.width > 0 && cr.height > 0 && !pointInRect(x, y, cr, UI.HIT_PADDING_PX))
         return null;
     }
@@ -1222,7 +1231,7 @@
       }
       if (!dmContainerCache)
         return;
-      if (!containerRect || e.timeStamp - containerRectTime > 1e3) {
+      if (!containerRect || e.timeStamp - containerRectTime > 250) {
         containerRect = dmContainerCache.getBoundingClientRect();
         containerRectTime = e.timeStamp;
       }
@@ -1236,6 +1245,7 @@
       ensureDebugPanelParent();
       ensureControlPanel();
       state.dmObserverTarget = null;
+      dmContainerCache = null;
       containerRect = null;
       setDbg("fullscreen", !!document.fullscreenElement);
       scheduleFrame();
@@ -1255,6 +1265,11 @@
       if (containerWaitTimer)
         return;
       containerWaitTimer = setInterval(function() {
+        if (state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) {
+          clearInterval(containerWaitTimer);
+          containerWaitTimer = 0;
+          return;
+        }
         var container2 = findDmContainer();
         if (container2) {
           dmContainerCache = container2;
@@ -1297,7 +1312,7 @@
     function tick() {
       state.rafScheduled = false;
       lastTickTime = performance.now();
-      var dmContainer = findDmContainer();
+      var dmContainer = dmContainerCache && isElementAlive(dmContainerCache) ? dmContainerCache : findDmContainer();
       if (CONFIG.debug)
         setDbg("mouse", state.mouse.x + "," + state.mouse.y);
       if (dmContainer !== dmContainerCache)
@@ -1330,7 +1345,11 @@
       }
       if (mouseDirty) {
         mouseDirty = false;
-        var hit = hitTest(state.mouse.x, state.mouse.y, dmContainer);
+        if (dmContainer && (!containerRect || performance.now() - containerRectTime > 250)) {
+          containerRect = dmContainer.getBoundingClientRect();
+          containerRectTime = performance.now();
+        }
+        var hit = hitTest(state.mouse.x, state.mouse.y, dmContainer, containerRect);
         if (!hit) {
           handleNoHit();
         } else {
@@ -1378,17 +1397,30 @@
     renderDebug();
     setInterval(ensureControlPanel, 2e3);
     var container = findDmContainer();
+    dmContainerCache = container;
     if (container)
       scanAndCache(container);
-    else
+    else {
+      containerRect = null;
       setDbg("dmCount", 0);
+    }
     startContainerWaiter();
     setInterval(function() {
+      if (state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD)
+        return;
       var scope = findDmContainer();
+      var cacheChanged = scope !== dmContainerCache;
       if (scope)
         scanAndCache(scope, { invalidate: true });
-      else
+      else {
+        containerRect = null;
         setDbg("dmCount", 0);
+      }
+      if (cacheChanged) {
+        containerRect = null;
+        scheduleFrame();
+      }
+      dmContainerCache = scope;
     }, TIMING.DM_SCAN_POLL_MS);
     scheduleFrame();
     console.log("[DM+1] " + (true ? "v0.0.6" : "dev") + " loaded");

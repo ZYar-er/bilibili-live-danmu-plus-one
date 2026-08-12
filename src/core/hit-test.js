@@ -1,6 +1,7 @@
-import { DM_NODE_SELECTOR, DM_CONTAINER_SELECTORS, UI } from '../config.js';
+import { DM_CONTAINER_SELECTORS, DM_NODE_SELECTOR, UI } from '../config.js';
 import { pointInRect, isElementAlive, firstMatch } from '../utils.js';
 import { getScope } from './env-detector.js';
+import { eachDanmuNode } from './observer.js';
 
 export { cacheParsed, getCachedParsed, clearParsedCache } from './danmu-cache.js';
 
@@ -55,25 +56,23 @@ export function hitTestFromStack(x, y, container) {
 
 export function fallbackScan(container, x, y) {
   if (!container) return null;
-  var scope = container;
-  if (!scope || !scope.querySelectorAll) return null;
-  var nodes = scope.querySelectorAll(DM_NODE_SELECTOR);
-  for (var i = 0; i < nodes.length; i++) {
-    var el = nodes[i];
-    if (!isElementAlive(el)) continue;
+  var hit = null;
+  eachDanmuNode(container, function (el) {
+    if (!isElementAlive(el)) return;
     var r = el.getBoundingClientRect();
-    if (r.width <= 4) continue;
-    if (!pointInRect(x, y, r, UI.HIT_PADDING_PX)) continue;
-    return { el: el, rect: r, rectText: rectText(r), selector: buildSelector(el), source: 'fallbackScan' };
-  }
-  return null;
+    if (r.width <= 4) return;
+    if (!pointInRect(x, y, r, UI.HIT_PADDING_PX)) return;
+    hit = { el: el, rect: r, rectText: rectText(r), selector: buildSelector(el), source: 'fallbackScan' };
+    return true;
+  });
+  return hit;
 }
 
-export function hitTest(x, y, container) {
+export function hitTest(x, y, container, containerRect) {
   if (x == null || y == null) return null;
   var dmContainer = resolveContainer(container);
   if (dmContainer) {
-    var cr = dmContainer.getBoundingClientRect();
+    var cr = containerRect || dmContainer.getBoundingClientRect();
     if (cr.width > 0 && cr.height > 0 && !pointInRect(x, y, cr, UI.HIT_PADDING_PX)) return null;
   }
   var hit = hitTestFromStack(x, y, dmContainer);

@@ -71,8 +71,8 @@ import { isSpecialEmojiAvailable, refreshAvailableEmojis } from './special-emoji
     }
     // 没有容器时不做任何调度（页面未加载或非直播页）
     if (!dmContainerCache) return;
-    // 缓存容器 rect，1s TTL 避免每帧强制重排
-    if (!containerRect || e.timeStamp - containerRectTime > 1000) {
+    // 缓存容器 rect，短 TTL 避免每帧强制重排，同时降低容器位移后的误判窗口
+    if (!containerRect || e.timeStamp - containerRectTime > 250) {
       containerRect = dmContainerCache.getBoundingClientRect();
       containerRectTime = e.timeStamp;
     }
@@ -88,6 +88,7 @@ import { isSpecialEmojiAvailable, refreshAvailableEmojis } from './special-emoji
     ensureDebugPanelParent();
     ensureControlPanel();
     state.dmObserverTarget = null;
+    dmContainerCache = null;
     containerRect = null;
     setDbg('fullscreen', !!document.fullscreenElement);
     scheduleFrame();
@@ -109,6 +110,11 @@ import { isSpecialEmojiAvailable, refreshAvailableEmojis } from './special-emoji
   function startContainerWaiter() {
     if (containerWaitTimer) return;
     containerWaitTimer = setInterval(function () {
+      if (state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) {
+        clearInterval(containerWaitTimer);
+        containerWaitTimer = 0;
+        return;
+      }
       var container = findDmContainer();
       if (container) {
         dmContainerCache = container;
@@ -151,7 +157,9 @@ import { isSpecialEmojiAvailable, refreshAvailableEmojis } from './special-emoji
   function tick() {
     state.rafScheduled = false;
     lastTickTime = performance.now();
-    var dmContainer = findDmContainer();
+    var dmContainer = dmContainerCache && isElementAlive(dmContainerCache)
+      ? dmContainerCache
+      : findDmContainer();
     if (CONFIG.debug) setDbg('mouse', state.mouse.x + ',' + state.mouse.y);
 
     if (dmContainer !== dmContainerCache) containerRect = null;
@@ -185,7 +193,11 @@ import { isSpecialEmojiAvailable, refreshAvailableEmojis } from './special-emoji
     // 鼠标移动时才跑 hitTest，静止时跳过（保留按钮跟随即可）
     if (mouseDirty) {
       mouseDirty = false;
-      var hit = hitTest(state.mouse.x, state.mouse.y, dmContainer);
+      if (dmContainer && (!containerRect || performance.now() - containerRectTime > 250)) {
+        containerRect = dmContainer.getBoundingClientRect();
+        containerRectTime = performance.now();
+      }
+      var hit = hitTest(state.mouse.x, state.mouse.y, dmContainer, containerRect);
       if (!hit) {
         handleNoHit();
       } else {
@@ -234,15 +246,29 @@ import { isSpecialEmojiAvailable, refreshAvailableEmojis } from './special-emoji
 
   // 初始扫描
   var container = findDmContainer();
+  dmContainerCache = container;
   if (container) scanAndCache(container);
-  else setDbg('dmCount', 0);
+  else {
+    containerRect = null;
+    setDbg('dmCount', 0);
+  }
   startContainerWaiter();
 
   // 定期兜底扫描（高频，减少漏绑）
   setInterval(function () {
+    if (state.noPlayerCount > TIMING.NO_PLAYER_THRESHOLD) return;
     var scope = findDmContainer();
+    var cacheChanged = scope !== dmContainerCache;
     if (scope) scanAndCache(scope, { invalidate: true });
-    else setDbg('dmCount', 0);
+    else {
+      containerRect = null;
+      setDbg('dmCount', 0);
+    }
+    if (cacheChanged) {
+      containerRect = null;
+      scheduleFrame();
+    }
+    dmContainerCache = scope;
   }, TIMING.DM_SCAN_POLL_MS);
 
   scheduleFrame();

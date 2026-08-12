@@ -1,6 +1,6 @@
 import { getScope } from './env-detector.js';
 import { firstMatch } from '../utils.js';
-import { DM_CONTAINER_SELECTORS, DM_NODE_SELECTOR } from '../config.js';
+import { DM_CONTAINER_SELECTORS, DM_CLASS, CONFIG } from '../config.js';
 import { state } from '../state.js';
 import { getDmText } from './danmu-parser.js';
 import { cacheParsed, getCachedParsed } from './danmu-cache.js';
@@ -10,7 +10,18 @@ import { setDbg } from '../ui/debug-panel.js';
 export function isDanmuNode(node) {
   if (node.nodeType !== Node.ELEMENT_NODE) return false;
   if (!(node instanceof HTMLElement)) return false;
-  if (node.matches && node.matches(DM_NODE_SELECTOR)) return true;
+  return !!(node.classList && node.classList.contains(DM_CLASS))
+    && node.getAttribute('role') === 'comment';
+}
+
+export function eachDanmuNode(root, fn) {
+  if (!root || !root.getElementsByClassName) return false;
+  var list = root.getElementsByClassName(DM_CLASS);
+  for (var i = 0; i < list.length; i++) {
+    var el = list[i];
+    if (el.getAttribute && el.getAttribute('role') !== 'comment') continue;
+    if (fn(el) === true) return true;
+  }
   return false;
 }
 
@@ -23,13 +34,11 @@ function cacheIfNeeded(el) {
 }
 
 export function scanAndCache(root, opts) {
-  if (!root || !root.querySelectorAll) return;
+  if (!root || !root.getElementsByClassName) return;
   var doInvalidate = opts && opts.invalidate;
-  var nodes = root.querySelectorAll(DM_NODE_SELECTOR);
   var count = 0;
-  for (var i = 0; i < nodes.length; i++) {
-    var el = nodes[i];
-    if (!(el instanceof HTMLElement)) continue;
+  eachDanmuNode(root, function (el) {
+    if (!(el instanceof HTMLElement)) return;
     var cached = getCachedParsed(el);
     if (!cached) {
       cacheParsed(el, getDmText(el));
@@ -41,12 +50,14 @@ export function scanAndCache(root, opts) {
       }
     }
     count++;
-  }
-  var container = findDmContainer();
-  if (container && root === container) {
-    setDbg('dmCount', count);
-  } else if (!container) {
-    setDbg('dmCount', 0);
+  });
+  if (CONFIG.debug) {
+    var container = findDmContainer();
+    if (container && root === container) {
+      setDbg('dmCount', count);
+    } else if (!container) {
+      setDbg('dmCount', 0);
+    }
   }
 }
 

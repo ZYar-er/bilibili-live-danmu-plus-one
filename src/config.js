@@ -29,7 +29,8 @@ export const DM_CONTAINER_SELECTORS = [
   '.live-player-dm-wrap',
 ];
 
-export const DM_NODE_SELECTOR = '.bili-danmaku-x-dm[role="comment"]';
+export const DM_CLASS = 'bili-danmaku-x-dm';
+export const DM_NODE_SELECTOR = '.' + DM_CLASS + '[role="comment"]';
 export const PLAYER_SELECTORS = '.bilibili-live-player-video, #live-player, .live-player-container';
 
 // 持久化
