@@ -258,6 +258,12 @@
       return EMOJI_ID_TO_NAME[rid];
     return "";
   }
+  function emojiHashFromSrc(src) {
+    if (!src)
+      return "";
+    var m = src.match(/bfs\/(?:live|emote)\/([0-9a-f]+)/i);
+    return m ? m[1] : "";
+  }
   function getDmText(el) {
     var parts = [];
     el.childNodes.forEach(function(child) {
@@ -269,6 +275,11 @@
         var name = resolveEmojiNameFromImg(child);
         if (name)
           parts.push({ type: "emoji", value: "[" + name + "]" });
+        else {
+          var hash = emojiHashFromSrc(child.getAttribute("src") || child.src || "");
+          if (hash)
+            parts.push({ type: "emoji-special", value: hash, hash });
+        }
       } else if (child.tagName === "SPAN" && child.classList.contains("emoji")) {
         parts.push({ type: "emoji-sm", value: child.textContent });
       }
@@ -278,13 +289,19 @@
     var text = parts.map(function(p) {
       return p.value;
     }).join("").replace(/\s+/g, " ").trim();
-    var hasText = false, hasEmoji = false;
+    var hasText = false, hasEmoji = false, hasSpecial = false;
     parts.forEach(function(p) {
       if (p.type === "text")
         hasText = true;
       if (p.type === "emoji" || p.type === "emoji-sm")
         hasEmoji = true;
+      if (p.type === "emoji-special")
+        hasSpecial = true;
     });
+    if (hasSpecial && (hasText || hasEmoji))
+      return { type: "mixed-special", text: "", hash: "" };
+    if (hasSpecial)
+      return { type: "emoji-special", text: parts[0].hash, hash: parts[0].hash };
     var type = hasText && hasEmoji ? "mixed" : hasText ? "text" : hasEmoji ? "emoji" : "unknown";
     return { type, text };
   }
@@ -698,7 +715,7 @@
         return;
       state.clickLocked = true;
       setBtnFeedback();
-      _sendDanmaku(state.currentHit.text);
+      _sendDanmaku(state.currentHit);
       setTimeout(function() {
         resetBtnFeedback();
         state.clickLocked = false;
@@ -772,7 +789,70 @@
       return true;
     return now - state.lastSendAt >= CONFIG.cooldownMs;
   }
-  function sendDanmaku(text) {
+  function queryScope(selector) {
+    var scope = document.fullscreenElement || document;
+    var el = scope.querySelector(selector);
+    if (el)
+      return el;
+    return document.querySelector(selector);
+  }
+  function findPanelButton() {
+    return queryScope('.emoticons-panel[title="\u8868\u60C5\u5305"]') || queryScope(".icon-right-part .emoticons-panel") || queryScope(".emoticons-panel");
+  }
+  function panelOpen() {
+    return !!queryScope(".emoticons-pane, .emoticon-item");
+  }
+  function findEmoticonItem(hash) {
+    var scope = document.fullscreenElement || document;
+    var items = scope.querySelectorAll(".emoticon-item");
+    if (!items.length)
+      items = document.querySelectorAll(".emoticon-item");
+    for (var i = 0; i < items.length; i++) {
+      var img = items[i].querySelector("img");
+      var src = img && (img.getAttribute("src") || img.src) || "";
+      var m = src.match(/bfs\/(?:live|emote)\/([0-9a-f]+)/i);
+      if (m && m[1].toLowerCase() === hash.toLowerCase())
+        return items[i];
+    }
+    return null;
+  }
+  function sendSpecialEmoji(hash) {
+    var now = Date.now();
+    if (!canSend(now)) {
+      setDbg("lastErr", "cooldown");
+      return false;
+    }
+    state.lastSendAt = now;
+    var btn = findPanelButton();
+    var item = findEmoticonItem(hash);
+    if (!item && btn && !panelOpen())
+      btn.click();
+    var tries = 0;
+    var timer = setInterval(function() {
+      tries++;
+      var found = findEmoticonItem(hash);
+      if (found) {
+        clearInterval(timer);
+        found.click();
+        setDbg("lastErr", "");
+        setDbg("lastSend", "emoji:" + hash);
+        return;
+      }
+      if (!panelOpen() && btn && tries < 3)
+        btn.click();
+      if (tries >= 10) {
+        clearInterval(timer);
+        setDbg("lastErr", "special_emoji_not_found");
+      }
+    }, 150);
+    return true;
+  }
+  function sendDanmaku(payload) {
+    var text = typeof payload === "string" ? payload : payload && payload.text;
+    var hash = payload && payload.hash;
+    var type = payload && payload.type;
+    if (type === "emoji-special" && hash)
+      return sendSpecialEmoji(hash);
     var now = Date.now();
     if (!canSend(now)) {
       setDbg("lastErr", "cooldown");
@@ -1190,13 +1270,14 @@
                 hideBtn();
                 clearCurrentHit();
               }
-              state.currentHit = { el: hit.el, text: payload.text, type: payload.type };
+              state.currentHit = { el: hit.el, text: payload.text, type: payload.type, hash: payload.hash };
               freeze(hit.el);
               state.frozenRect = hit.rect;
               showBtn(hit.el, state.frozenRect);
             } else {
               state.currentHit.text = payload.text;
               state.currentHit.type = payload.type;
+              state.currentHit.hash = payload.hash;
             }
             setDbg("hitText", payload.text);
             setDbg("hitType", payload.type);

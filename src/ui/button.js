@@ -73,7 +73,7 @@ export function setupButtonEvents() {
     if (!state.currentHit || !state.currentHit.text) return;
     state.clickLocked = true;
     setBtnFeedback();
-    _sendDanmaku(state.currentHit.text);
+    _sendDanmaku(state.currentHit);
     setTimeout(function () {
       resetBtnFeedback();
       state.clickLocked = false;

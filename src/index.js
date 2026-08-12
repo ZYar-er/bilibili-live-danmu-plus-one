@@ -191,13 +191,14 @@ import { initControlPanel, ensureControlPanel } from './ui/control-panel.js';
         } else {
           if (!state.currentHit || state.currentHit.el !== hit.el) {
             if (state.currentHit) { hideBtn(); clearCurrentHit(); }
-            state.currentHit = { el: hit.el, text: payload.text, type: payload.type };
+            state.currentHit = { el: hit.el, text: payload.text, type: payload.type, hash: payload.hash };
             freeze(hit.el);
             state.frozenRect = hit.rect;
             showBtn(hit.el, state.frozenRect);
           } else {
             state.currentHit.text = payload.text;
             state.currentHit.type = payload.type;
+            state.currentHit.hash = payload.hash;
           }
           setDbg('hitText', payload.text);
           setDbg('hitType', payload.type);

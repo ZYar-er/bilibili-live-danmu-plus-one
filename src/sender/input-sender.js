@@ -51,7 +51,71 @@ function canSend(now) {
   return now - state.lastSendAt >= CONFIG.cooldownMs;
 }
 
-export function sendDanmaku(text) {
+function queryScope(selector) {
+  var scope = document.fullscreenElement || document;
+  var el = scope.querySelector(selector);
+  if (el) return el;
+  return document.querySelector(selector);
+}
+
+function findPanelButton() {
+  return queryScope('.emoticons-panel[title="表情包"]')
+    || queryScope('.icon-right-part .emoticons-panel')
+    || queryScope('.emoticons-panel');
+}
+
+function panelOpen() {
+  return !!queryScope('.emoticons-pane, .emoticon-item');
+}
+
+function findEmoticonItem(hash) {
+  var scope = document.fullscreenElement || document;
+  var items = scope.querySelectorAll('.emoticon-item');
+  if (!items.length) items = document.querySelectorAll('.emoticon-item');
+  for (var i = 0; i < items.length; i++) {
+    var img = items[i].querySelector('img');
+    var src = img && (img.getAttribute('src') || img.src) || '';
+    var m = src.match(/bfs\/(?:live|emote)\/([0-9a-f]+)/i);
+    if (m && m[1].toLowerCase() === hash.toLowerCase()) return items[i];
+  }
+  return null;
+}
+
+function sendSpecialEmoji(hash) {
+  var now = Date.now();
+  if (!canSend(now)) { setDbg('lastErr', 'cooldown'); return false; }
+  state.lastSendAt = now;
+
+  var btn = findPanelButton();
+  var item = findEmoticonItem(hash);
+  if (!item && btn && !panelOpen()) btn.click();
+
+  var tries = 0;
+  var timer = setInterval(function () {
+    tries++;
+    var found = findEmoticonItem(hash);
+    if (found) {
+      clearInterval(timer);
+      found.click();
+      setDbg('lastErr', '');
+      setDbg('lastSend', 'emoji:' + hash);
+      return;
+    }
+    if (!panelOpen() && btn && tries < 3) btn.click();
+    if (tries >= 10) {
+      clearInterval(timer);
+      setDbg('lastErr', 'special_emoji_not_found');
+    }
+  }, 150);
+  return true;
+}
+
+export function sendDanmaku(payload) {
+  var text = typeof payload === 'string' ? payload : payload && payload.text;
+  var hash = payload && payload.hash;
+  var type = payload && payload.type;
+  if (type === 'emoji-special' && hash) return sendSpecialEmoji(hash);
+
   var now = Date.now();
   if (!canSend(now)) { setDbg('lastErr', 'cooldown'); return false; }
   var input = findInput();
