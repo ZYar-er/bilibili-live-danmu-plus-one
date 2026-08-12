@@ -1,12 +1,11 @@
-# Release v0.0.6
+# Release v0.0.7
 
 ## 更改
 
-- **页内控制面板** — 设置入口迁移到直播间播放器控制栏（点赞按钮左侧的齿轮图标），移除 Tampermonkey 菜单
-- **面板设置** — 发送冷却开关、发送间隔、按钮透明度、调试面板、重置设置
-- **GitHub Pages** — 新增介绍与安装引导页：https://zyar-er.github.io/bili-danmu-plus1/
-- **Logo** — 新增 B站粉 +1 logo，用于 README、favicon 与脚本 `@icon`
-- **仓库更名** — 仓库与 userscript 更名为 `bili-danmu-plus1` / `bili-danmu-plus1.user.js`
+- **特殊表情一键发送** — 直播间专属图片表情可直接 +1，自动定位表情包 tab 并点击发送
+- **可用表情过滤** — 特殊表情不在当前账号表情面板中时不显示 +1，避免误发不可用表情
+- **模块重构** — 特殊表情识别、定位与发送抽离为独立模块，便于维护
+- **性能优化** — 主循环容器 rect 缓存、弹幕扫描改用 `getElementsByClassName` 快路径、debug 统计收窄
 
 ## 安装方法
 

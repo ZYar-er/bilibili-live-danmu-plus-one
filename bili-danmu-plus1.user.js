@@ -2,7 +2,7 @@
 // @name         B站直播弹幕 +1
 // @name:zh-CN   B站直播弹幕 +1
 // @namespace    https://github.com/ZYar-er/bili-danmu-plus1
-// @version      0.0.6
+// @version      0.0.7
 // @description  鼠标悬停弹幕即可一键发送同款弹幕+1，支持文字/emoji/表情图片，可配置发送间隔
 // @description:zh-CN  鼠标悬停弹幕即可一键发送同款弹幕+1，支持文字/emoji/表情图片，可配置发送间隔
 // @author       ZYar-er
@@ -303,7 +303,7 @@
   function renderDebug() {
     if (!CONFIG.debug || !_debugPanel)
       return;
-    _debugPanel.textContent = "[DM+1 DEBUG " + (true ? "v0.0.6" : "dev") + "]\nframe            : " + DBG.frame + "\ndmCount          : " + DBG.dmCount + "\nmouse            : " + DBG.mouse + "\nhitType          : " + (DBG.hitType || "(none)") + "\nhitText          : " + (DBG.hitText || "(none)") + "\nhitSource        : " + (DBG.hitSource || "(none)") + "\nhitSelector      : " + (DBG.hitSelector || "(none)") + "\nhitRect          : " + (DBG.hitRect || "(none)") + "\nbtnVisible       : " + DBG.btnVisible + "\nfrozen           : " + DBG.frozen + "\ncurrentConnected : " + DBG.currentConnected + "\nlastSend         : " + (DBG.lastSend || "(none)") + "\nlastErr          : " + (DBG.lastErr || "(none)") + "\nenableCooldown   : " + DBG.enableSendCooldown + "\ncooldownMs       : " + DBG.cooldownMs + "\nfullscreen       : " + DBG.fullscreen;
+    _debugPanel.textContent = "[DM+1 DEBUG " + (true ? "v0.0.7" : "dev") + "]\nframe            : " + DBG.frame + "\ndmCount          : " + DBG.dmCount + "\nmouse            : " + DBG.mouse + "\nhitType          : " + (DBG.hitType || "(none)") + "\nhitText          : " + (DBG.hitText || "(none)") + "\nhitSource        : " + (DBG.hitSource || "(none)") + "\nhitSelector      : " + (DBG.hitSelector || "(none)") + "\nhitRect          : " + (DBG.hitRect || "(none)") + "\nbtnVisible       : " + DBG.btnVisible + "\nfrozen           : " + DBG.frozen + "\ncurrentConnected : " + DBG.currentConnected + "\nlastSend         : " + (DBG.lastSend || "(none)") + "\nlastErr          : " + (DBG.lastErr || "(none)") + "\nenableCooldown   : " + DBG.enableSendCooldown + "\ncooldownMs       : " + DBG.cooldownMs + "\nfullscreen       : " + DBG.fullscreen;
   }
 
   // src/special-emoji.js
@@ -1178,7 +1178,7 @@
       _resetBtn.textContent = "\u91CD\u7F6E\u6240\u6709\u8BBE\u7F6E";
   }
   function getVersion() {
-    return true ? "v0.0.6" : "dev";
+    return true ? "v0.0.7" : "dev";
   }
 
   // src/index.js
@@ -1423,6 +1423,6 @@
       dmContainerCache = scope;
     }, TIMING.DM_SCAN_POLL_MS);
     scheduleFrame();
-    console.log("[DM+1] " + (true ? "v0.0.6" : "dev") + " loaded");
+    console.log("[DM+1] " + (true ? "v0.0.7" : "dev") + " loaded");
   })();
 })();
