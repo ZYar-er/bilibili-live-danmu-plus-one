@@ -1,4 +1,5 @@
 import { EMOJI_ID_TO_NAME } from '../emoji-map.js';
+import { specialEmojiFromImg } from '../special-emoji.js';
 
 function resolveEmojiNameFromImg(img) {
   var name = img.dataset.name || img.getAttribute('alt') || '';
@@ -21,12 +22,6 @@ function resolveEmojiNameFromImg(img) {
   return '';
 }
 
-function emojiHashFromSrc(src) {
-  if (!src) return '';
-  var m = src.match(/bfs\/(?:live|emote)\/([0-9a-f]+)/i);
-  return m ? m[1] : '';
-}
-
 // 遍历直接子节点，区分 TEXT / IMG / SPAN.emoji / 特殊图片表情
 export function getDmText(el) {
   var parts = [];
@@ -38,7 +33,7 @@ export function getDmText(el) {
       var name = resolveEmojiNameFromImg(child);
       if (name) parts.push({ type: 'emoji', value: '[' + name + ']' });
       else {
-        var hash = emojiHashFromSrc(child.getAttribute('src') || child.src || '');
+        var hash = specialEmojiFromImg(child);
         if (hash) parts.push({ type: 'emoji-special', value: hash, hash: hash });
       }
     } else if (child.tagName === 'SPAN' && child.classList.contains('emoji')) {

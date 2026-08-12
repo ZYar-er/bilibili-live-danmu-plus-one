@@ -242,104 +242,6 @@
     "ffb53c252b085d042173379ac724694ce3196194": "\u5403\u74DC"
   };
 
-  // src/core/danmu-parser.js
-  function resolveEmojiNameFromImg(img) {
-    var name = img.dataset.name || img.getAttribute("alt") || "";
-    if (name)
-      return name;
-    var rid = img.dataset.resourceId || img.getAttribute("data-resource-id") || img.getAttribute("data-resourceId") || img.dataset.id || img.getAttribute("data-id") || "";
-    if (!rid) {
-      var src = img.getAttribute("src") || img.src || "";
-      var match = src.match(/bfs\/live\/([0-9a-f]+)/i);
-      if (match)
-        rid = match[1];
-    }
-    if (rid && EMOJI_ID_TO_NAME[rid])
-      return EMOJI_ID_TO_NAME[rid];
-    return "";
-  }
-  function emojiHashFromSrc(src) {
-    if (!src)
-      return "";
-    var m = src.match(/bfs\/(?:live|emote)\/([0-9a-f]+)/i);
-    return m ? m[1] : "";
-  }
-  function getDmText(el) {
-    var parts = [];
-    el.childNodes.forEach(function(child) {
-      if (child.nodeType === Node.TEXT_NODE) {
-        var t = child.textContent.replace(/\s+/g, " ");
-        if (t.trim())
-          parts.push({ type: "text", value: t });
-      } else if (child.tagName === "IMG") {
-        var name = resolveEmojiNameFromImg(child);
-        if (name)
-          parts.push({ type: "emoji", value: "[" + name + "]" });
-        else {
-          var hash = emojiHashFromSrc(child.getAttribute("src") || child.src || "");
-          if (hash)
-            parts.push({ type: "emoji-special", value: hash, hash });
-        }
-      } else if (child.tagName === "SPAN" && child.classList.contains("emoji")) {
-        parts.push({ type: "emoji-sm", value: child.textContent });
-      }
-    });
-    if (parts.length === 0)
-      return { type: "unknown", text: "" };
-    var text = parts.map(function(p) {
-      return p.value;
-    }).join("").replace(/\s+/g, " ").trim();
-    var hasText = false, hasEmoji = false, hasSpecial = false;
-    parts.forEach(function(p) {
-      if (p.type === "text")
-        hasText = true;
-      if (p.type === "emoji" || p.type === "emoji-sm")
-        hasEmoji = true;
-      if (p.type === "emoji-special")
-        hasSpecial = true;
-    });
-    if (hasSpecial && (hasText || hasEmoji))
-      return { type: "mixed-special", text: "", hash: "" };
-    if (hasSpecial)
-      return { type: "emoji-special", text: parts[0].hash, hash: parts[0].hash };
-    var type = hasText && hasEmoji ? "mixed" : hasText ? "text" : hasEmoji ? "emoji" : "unknown";
-    return { type, text };
-  }
-
-  // src/core/danmu-cache.js
-  var _parsedCache = /* @__PURE__ */ new WeakMap();
-  function cacheParsed(el, payload) {
-    if (!el)
-      return;
-    payload._raw = el.textContent;
-    _parsedCache.set(el, payload);
-  }
-  function getCachedParsed(el) {
-    return _parsedCache.get(el);
-  }
-
-  // src/ui/safe-container.js
-  var _safeContainer;
-  function ensureSafeContainer() {
-    if (!_safeContainer) {
-      _safeContainer = document.createElement("div");
-      _safeContainer.dataset.dm1Safe = "1";
-      _safeContainer.style.cssText = "position:fixed;inset:0;overflow:visible;pointer-events:none;z-index:" + (UI.Z_INDEX - 1);
-    }
-    var r = root();
-    if (_safeContainer.parentNode !== r)
-      r.appendChild(_safeContainer);
-    return _safeContainer;
-  }
-  function getSafeContainer() {
-    return _safeContainer;
-  }
-  function rescue(el) {
-    ensureSafeContainer();
-    _safeContainer.appendChild(el);
-    el.style.pointerEvents = "auto";
-  }
-
   // src/ui/debug-panel.js
   var _debugPanel;
   function initDebugPanel() {
@@ -401,6 +303,201 @@
     if (!CONFIG.debug || !_debugPanel)
       return;
     _debugPanel.textContent = "[DM+1 DEBUG " + (true ? "v0.0.6" : "dev") + "]\nframe            : " + DBG.frame + "\ndmCount          : " + DBG.dmCount + "\nmouse            : " + DBG.mouse + "\nhitType          : " + (DBG.hitType || "(none)") + "\nhitText          : " + (DBG.hitText || "(none)") + "\nhitSource        : " + (DBG.hitSource || "(none)") + "\nhitSelector      : " + (DBG.hitSelector || "(none)") + "\nhitRect          : " + (DBG.hitRect || "(none)") + "\nbtnVisible       : " + DBG.btnVisible + "\nfrozen           : " + DBG.frozen + "\ncurrentConnected : " + DBG.currentConnected + "\nlastSend         : " + (DBG.lastSend || "(none)") + "\nlastErr          : " + (DBG.lastErr || "(none)") + "\nenableCooldown   : " + DBG.enableSendCooldown + "\ncooldownMs       : " + DBG.cooldownMs + "\nfullscreen       : " + DBG.fullscreen;
+  }
+
+  // src/special-emoji.js
+  function emojiHashFromSrc(src) {
+    if (!src)
+      return "";
+    var m = src.match(/bfs\/(?:live|emote)\/([0-9a-f]+)/i);
+    return m ? m[1] : "";
+  }
+  function specialEmojiFromImg(img) {
+    if (!img)
+      return "";
+    return emojiHashFromSrc(img.getAttribute("src") || img.src || "");
+  }
+  function queryScope(selector) {
+    var scope = document.fullscreenElement || document;
+    var el = scope.querySelector(selector);
+    if (el)
+      return el;
+    return document.querySelector(selector);
+  }
+  function findPanelButton() {
+    return queryScope('.emoticons-panel[title="\u8868\u60C5\u5305"]') || queryScope(".icon-right-part .emoticons-panel") || queryScope(".emoticons-panel");
+  }
+  function panelOpen() {
+    return !!queryScope(".emoticons-pane, .emoticon-item");
+  }
+  function findEmoticonItem(hash) {
+    var scope = document.fullscreenElement || document;
+    var items = scope.querySelectorAll(".emoticon-item");
+    if (!items.length)
+      items = document.querySelectorAll(".emoticon-item");
+    for (var i = 0; i < items.length; i++) {
+      var img = items[i].querySelector("img");
+      var src = img && (img.getAttribute("src") || img.src) || "";
+      var m = src.match(/bfs\/(?:live|emote)\/([0-9a-f]+)/i);
+      if (m && m[1].toLowerCase() === hash.toLowerCase())
+        return items[i];
+    }
+    return null;
+  }
+  function activateEmoticonTab(item) {
+    var pane = item.closest ? item.closest(".img-pane") : null;
+    if (!pane || !pane.parentNode)
+      return;
+    var panes = Array.prototype.filter.call(pane.parentNode.children, function(el) {
+      return el.classList && el.classList.contains("img-pane");
+    });
+    var idx = -1;
+    for (var i = 0; i < panes.length; i++) {
+      if (panes[i] === pane) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx < 0)
+      return;
+    var tab = pane.parentNode.querySelectorAll(".tab-pane-item")[idx];
+    if (tab && !tab.classList.contains("active"))
+      tab.click();
+  }
+  function sendSpecialEmoji(hash) {
+    var now = Date.now();
+    if (!canSend(now)) {
+      setDbg("lastErr", "cooldown");
+      return false;
+    }
+    state.lastSendAt = now;
+    var btn = findPanelButton();
+    var item = findEmoticonItem(hash);
+    if (!item && btn && !panelOpen())
+      btn.click();
+    else if (item)
+      activateEmoticonTab(item);
+    var tries = 0;
+    var timer = setInterval(function() {
+      tries++;
+      var found = findEmoticonItem(hash);
+      if (found) {
+        clearInterval(timer);
+        activateEmoticonTab(found);
+        setTimeout(function() {
+          var ready = findEmoticonItem(hash);
+          if (ready)
+            ready.click();
+        }, 60);
+        setDbg("lastErr", "");
+        setDbg("lastSend", "emoji:" + hash);
+        return;
+      }
+      if (!panelOpen() && btn && tries < 3)
+        btn.click();
+      if (tries >= 10) {
+        clearInterval(timer);
+        setDbg("lastErr", "special_emoji_not_found");
+      }
+    }, 150);
+    return true;
+  }
+  function canSend(now) {
+    if (!CONFIG.enableSendCooldown)
+      return true;
+    return now - state.lastSendAt >= CONFIG.cooldownMs;
+  }
+
+  // src/core/danmu-parser.js
+  function resolveEmojiNameFromImg(img) {
+    var name = img.dataset.name || img.getAttribute("alt") || "";
+    if (name)
+      return name;
+    var rid = img.dataset.resourceId || img.getAttribute("data-resource-id") || img.getAttribute("data-resourceId") || img.dataset.id || img.getAttribute("data-id") || "";
+    if (!rid) {
+      var src = img.getAttribute("src") || img.src || "";
+      var match = src.match(/bfs\/live\/([0-9a-f]+)/i);
+      if (match)
+        rid = match[1];
+    }
+    if (rid && EMOJI_ID_TO_NAME[rid])
+      return EMOJI_ID_TO_NAME[rid];
+    return "";
+  }
+  function getDmText(el) {
+    var parts = [];
+    el.childNodes.forEach(function(child) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        var t = child.textContent.replace(/\s+/g, " ");
+        if (t.trim())
+          parts.push({ type: "text", value: t });
+      } else if (child.tagName === "IMG") {
+        var name = resolveEmojiNameFromImg(child);
+        if (name)
+          parts.push({ type: "emoji", value: "[" + name + "]" });
+        else {
+          var hash = specialEmojiFromImg(child);
+          if (hash)
+            parts.push({ type: "emoji-special", value: hash, hash });
+        }
+      } else if (child.tagName === "SPAN" && child.classList.contains("emoji")) {
+        parts.push({ type: "emoji-sm", value: child.textContent });
+      }
+    });
+    if (parts.length === 0)
+      return { type: "unknown", text: "" };
+    var text = parts.map(function(p) {
+      return p.value;
+    }).join("").replace(/\s+/g, " ").trim();
+    var hasText = false, hasEmoji = false, hasSpecial = false;
+    parts.forEach(function(p) {
+      if (p.type === "text")
+        hasText = true;
+      if (p.type === "emoji" || p.type === "emoji-sm")
+        hasEmoji = true;
+      if (p.type === "emoji-special")
+        hasSpecial = true;
+    });
+    if (hasSpecial && (hasText || hasEmoji))
+      return { type: "mixed-special", text: "", hash: "" };
+    if (hasSpecial)
+      return { type: "emoji-special", text: parts[0].hash, hash: parts[0].hash };
+    var type = hasText && hasEmoji ? "mixed" : hasText ? "text" : hasEmoji ? "emoji" : "unknown";
+    return { type, text };
+  }
+
+  // src/core/danmu-cache.js
+  var _parsedCache = /* @__PURE__ */ new WeakMap();
+  function cacheParsed(el, payload) {
+    if (!el)
+      return;
+    payload._raw = el.textContent;
+    _parsedCache.set(el, payload);
+  }
+  function getCachedParsed(el) {
+    return _parsedCache.get(el);
+  }
+
+  // src/ui/safe-container.js
+  var _safeContainer;
+  function ensureSafeContainer() {
+    if (!_safeContainer) {
+      _safeContainer = document.createElement("div");
+      _safeContainer.dataset.dm1Safe = "1";
+      _safeContainer.style.cssText = "position:fixed;inset:0;overflow:visible;pointer-events:none;z-index:" + (UI.Z_INDEX - 1);
+    }
+    var r = root();
+    if (_safeContainer.parentNode !== r)
+      r.appendChild(_safeContainer);
+    return _safeContainer;
+  }
+  function getSafeContainer() {
+    return _safeContainer;
+  }
+  function rescue(el) {
+    ensureSafeContainer();
+    _safeContainer.appendChild(el);
+    el.style.pointerEvents = "auto";
   }
 
   // src/core/observer.js
@@ -783,69 +880,6 @@
         return btns[i];
     }
     return null;
-  }
-  function canSend(now) {
-    if (!CONFIG.enableSendCooldown)
-      return true;
-    return now - state.lastSendAt >= CONFIG.cooldownMs;
-  }
-  function queryScope(selector) {
-    var scope = document.fullscreenElement || document;
-    var el = scope.querySelector(selector);
-    if (el)
-      return el;
-    return document.querySelector(selector);
-  }
-  function findPanelButton() {
-    return queryScope('.emoticons-panel[title="\u8868\u60C5\u5305"]') || queryScope(".icon-right-part .emoticons-panel") || queryScope(".emoticons-panel");
-  }
-  function panelOpen() {
-    return !!queryScope(".emoticons-pane, .emoticon-item");
-  }
-  function findEmoticonItem(hash) {
-    var scope = document.fullscreenElement || document;
-    var items = scope.querySelectorAll(".emoticon-item");
-    if (!items.length)
-      items = document.querySelectorAll(".emoticon-item");
-    for (var i = 0; i < items.length; i++) {
-      var img = items[i].querySelector("img");
-      var src = img && (img.getAttribute("src") || img.src) || "";
-      var m = src.match(/bfs\/(?:live|emote)\/([0-9a-f]+)/i);
-      if (m && m[1].toLowerCase() === hash.toLowerCase())
-        return items[i];
-    }
-    return null;
-  }
-  function sendSpecialEmoji(hash) {
-    var now = Date.now();
-    if (!canSend(now)) {
-      setDbg("lastErr", "cooldown");
-      return false;
-    }
-    state.lastSendAt = now;
-    var btn = findPanelButton();
-    var item = findEmoticonItem(hash);
-    if (!item && btn && !panelOpen())
-      btn.click();
-    var tries = 0;
-    var timer = setInterval(function() {
-      tries++;
-      var found = findEmoticonItem(hash);
-      if (found) {
-        clearInterval(timer);
-        found.click();
-        setDbg("lastErr", "");
-        setDbg("lastSend", "emoji:" + hash);
-        return;
-      }
-      if (!panelOpen() && btn && tries < 3)
-        btn.click();
-      if (tries >= 10) {
-        clearInterval(timer);
-        setDbg("lastErr", "special_emoji_not_found");
-      }
-    }, 150);
-    return true;
   }
   function sendDanmaku(payload) {
     var text = typeof payload === "string" ? payload : payload && payload.text;
