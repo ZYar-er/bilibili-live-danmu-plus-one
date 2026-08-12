@@ -12,6 +12,7 @@ import { initDebugPanel, ensureDebugPanelParent, setDbg, renderDebug } from './u
 import { ensureSafeContainer } from './ui/safe-container.js';
 import { sendDanmaku } from './sender/input-sender.js';
 import { initControlPanel, ensureControlPanel } from './ui/control-panel.js';
+import { isSpecialEmojiAvailable, refreshAvailableEmojis } from './special-emoji.js';
 
 (function init() {
   if (isActivityShell()) {
@@ -52,6 +53,8 @@ import { initControlPanel, ensureControlPanel } from './ui/control-panel.js';
 
   // 注入 sendDanmaku 到按钮 click 事件
   setupButtonEvents().injectSender(sendDanmaku);
+
+  refreshAvailableEmojis();
 
   // ========= mousemove =========
   var dmContainerCache = null;
@@ -120,12 +123,14 @@ import { initControlPanel, ensureControlPanel } from './ui/control-panel.js';
 
   function resolvePayload(el) {
     var cached = getCachedParsed(el);
-    if (cached && el.textContent === cached._raw) return cached;
-    var parsed = getDmText(el);
+    var parsed = (cached && el.textContent === cached._raw) ? cached : getDmText(el);
     if (cached) cached._raw = el.textContent;
     if (!cached || cached.text !== parsed.text || cached.type !== parsed.type) {
       cacheParsed(el, parsed);
       cached = parsed;
+    }
+    if (parsed.type === 'emoji-special' && parsed.hash && !isSpecialEmojiAvailable(parsed.hash)) {
+      return { type: 'unknown', text: '' };
     }
     return cached;
   }

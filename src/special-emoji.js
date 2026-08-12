@@ -2,10 +2,48 @@ import { CONFIG } from './config.js';
 import { state } from './state.js';
 import { setDbg } from './ui/debug-panel.js';
 
+var availableHashes = {};
+var availableLoaded = false;
+
 export function emojiHashFromSrc(src) {
   if (!src) return '';
   var m = src.match(/bfs\/(?:live|emote)\/([0-9a-f]+)/i);
   return m ? m[1] : '';
+}
+
+function roomIdFromPath() {
+  var m = location.pathname.match(/^\/(\d+)/);
+  return m ? m[1] : '';
+}
+
+export function refreshAvailableEmojis() {
+  var roomId = roomIdFromPath();
+  if (!roomId) return Promise.resolve(false);
+  return fetch('https://api.live.bilibili.com/xlive/web-ucenter/v2/emoticon/GetEmoticons'
+    + '?platform=pc&room_id=' + encodeURIComponent(roomId), { credentials: 'include' })
+    .then(function (res) { return res.json(); })
+    .then(function (json) {
+      if (!json || json.code !== 0 || !json.data || !Array.isArray(json.data.data)) return false;
+      json.data.data.forEach(function (pkg) {
+        if (!pkg || !Array.isArray(pkg.emoticons)) return;
+        pkg.emoticons.forEach(function (e) {
+          if (!e || e.perm !== 1 || e.unlock_need_gift) return;
+          var unique = e.emoticon_unique || '';
+          if (/^emoji_\d+$/.test(unique)) return;
+          var hash = emojiHashFromSrc(e.url || '');
+          if (!hash) return;
+          availableHashes[hash.toLowerCase()] = 1;
+        });
+      });
+      availableLoaded = true;
+      return true;
+    })
+    .catch(function () { return false; });
+}
+
+export function isSpecialEmojiAvailable(hash) {
+  if (!availableLoaded) return true;
+  return !!availableHashes[String(hash || '').toLowerCase()];
 }
 
 export function specialEmojiFromImg(img) {
